@@ -1,4 +1,4 @@
-"""Command-line entry point: ``acd run``, ``acd eval``, ``acd plot``, ``acd testbench``."""
+"""Command-line entry point: ``acd run``, ``bench``, ``eval``, ``plot`` and ``testbench``."""
 
 from __future__ import annotations
 
@@ -76,6 +76,25 @@ def _cmd_eval(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_bench_run(args: argparse.Namespace) -> int:
+    from acd.bench import load_suite, run_suite
+
+    seeds = [int(x) for x in args.seeds.split(",")] if args.seeds else None
+    only = args.only.split(",") if args.only else None
+    out_dir, _ = run_suite(
+        load_suite(args.suite), args.variant, args.out, seeds, args.time_limit, args.workers, only
+    )
+    print((out_dir / "summary.md").read_text())
+    return 0
+
+
+def _cmd_bench_compare(args: argparse.Namespace) -> int:
+    from acd.bench import compare
+
+    print(compare(args.dirs), end="")
+    return 0
+
+
 def _cmd_plot(args: argparse.Namespace) -> int:
     from acd.plot import plot_run
 
@@ -105,6 +124,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     p.add_argument("--out", type=Path, default=Path("runs"), help="output root (default: runs)")
     p.add_argument("--quiet", action="store_true")
     p.set_defaults(func=_cmd_run)
+
+    bench = sub.add_parser("bench", help="run or compare benchmark suites").add_subparsers(
+        dest="bench_command", required=True
+    )
+    p = bench.add_parser("run", help="run a search variant over every benchmark and seed")
+    p.add_argument("suite", type=Path)
+    p.add_argument("--variant", type=Path, required=True, help="variant TOML (search settings)")
+    p.add_argument("--seeds", help="comma-separated, e.g. 1,2,3 (default: the suite's)")
+    p.add_argument("--time-limit", type=float, help="seconds per run (default: the suite's)")
+    p.add_argument("--workers", type=int)
+    p.add_argument("--only", help="comma-separated benchmark names")
+    p.add_argument("--out", type=Path, default=Path("results/bench"))
+    p.set_defaults(func=_cmd_bench_run)
+    p = bench.add_parser("compare", help="scoreboard across benchmark output directories")
+    p.add_argument("dirs", nargs="+", type=Path)
+    p.set_defaults(func=_cmd_bench_compare)
 
     p = sub.add_parser("eval", help="simulate one circuit (.subckt file) and print its metrics")
     p.add_argument("circuit", type=Path)

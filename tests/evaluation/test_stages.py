@@ -139,6 +139,19 @@ def test_plausible_fake_result_passes() -> None:
 
 
 @pytest.mark.ngspice
+def test_source_resistance_loads_the_input(ngspice: Ngspice) -> None:
+    # 10k in front of the RC low-pass moves its corner to 1 / (2 pi (10k + 1.6k) 100n) = 137 Hz.
+    config = TestbenchConfig(r_source=10e3)
+    e = evaluate(load_fixture("rc_lowpass"), ngspice, config)
+    assert e.ok and e.response is not None
+    assert summarize(e.response).f_3db_hz == pytest.approx(
+        1 / (2 * math.pi * 11.6e3 * 100e-9), rel=0.03
+    )
+    netlist = build_testbench(load_fixture("rc_lowpass"), config).netlist
+    assert "RSOURCE vsrc vin 10000" in netlist and "VIN vsrc 0 DC 1.65 AC 1" in netlist
+
+
+@pytest.mark.ngspice
 def test_transistor_regions(ngspice: Ngspice) -> None:
     # Collector and emitter both grounded: vce = 0, so the NPN can't be in its active region.
     c, _ = Circuit().add(Kind.NPN, (GND, VIN, GND))
@@ -184,3 +197,6 @@ def test_testbench_netlist() -> None:
 def test_port_context_follows_load() -> None:
     assert TestbenchConfig().port_context().resistive_loads == ("VOUT",)
     assert TestbenchConfig(r_load=None).port_context().resistive_loads == ()
+    with_source = TestbenchConfig(r_source=10e3).port_context()
+    assert with_source.voltage_sources == ("VDD",)
+    assert with_source.resistive_loads == ("VOUT", "VIN")

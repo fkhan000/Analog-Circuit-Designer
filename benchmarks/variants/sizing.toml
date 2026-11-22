@@ -1,0 +1,11 @@
+# Each new topology gets its values tuned (about 40 simulations) before it's scored.
+workers = 0
+
+[ga]
+population_size = 100
+elite_count = 4
+tournament_size = 4
+
+[sizing]
+enabled = true
+budget = 40

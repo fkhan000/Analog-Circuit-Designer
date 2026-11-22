@@ -1,0 +1,15 @@
+# High-pass: flat above 100 kHz, at least 30 dB down below 1 kHz.
+# A first-order filter only falls 20 dB per decade, so this needs second order or better.
+name = "highpass 10 kHz"
+type = "mask"
+
+[[band]]
+f_lo = 100e3
+f_hi = 1e6
+min_db = -1
+max_db = 0.5
+
+[[band]]
+f_lo = 10
+f_hi = 1e3
+max_db = -30

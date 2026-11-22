@@ -1,0 +1,21 @@
+# Notch at 1 kHz: at least 30 dB down from 950 to 1050 Hz, flat a decade either side
+# (the kind of filter used to remove mains hum or a single interfering tone).
+name = "notch 1 kHz"
+type = "mask"
+
+[[band]]
+f_lo = 950
+f_hi = 1050
+max_db = -30
+
+[[band]]
+f_lo = 10
+f_hi = 200
+min_db = -1
+max_db = 0.5
+
+[[band]]
+f_lo = 5e3
+f_hi = 100e3
+min_db = -1
+max_db = 0.5
