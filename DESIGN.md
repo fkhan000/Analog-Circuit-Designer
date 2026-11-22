@@ -143,6 +143,22 @@ Log-axis sine target, every variant given the same 120 s on 11 workers, 3 seeds 
 
 Its time response (step and impulse response from an ngspice transient) rings across about four decades of time, the time-domain image of features spread over four decades of frequency: [`docs/results/search_comparison_best_time.png`](docs/results/search_comparison_best_time.png). The target only constrains gain, so a different circuit with the same gain curve could ring differently.
 
+## Benchmark suite
+
+Conclusions drawn from one target don't generalize, so search changes are now scored on a suite of
+10 benchmarks (`benchmarks/suite.toml`), each with its own time limit and seeds:
+
+| Group | Benchmarks |
+|---|---|
+| Passive filters | 1 kHz low-pass, 10 kHz high-pass (needs second order), 10 kHz band-pass, 1 kHz notch (30 dB deep) |
+| Unusual responses | pink-noise filter (-3 dB/octave, no integer-order filter has that slope), sine on a Bode plot |
+| Needs transistors | 20 dB and 40 dB amplifiers, low-pass with 10 dB gain, buffer from a 10 kOhm source into 1 kOhm |
+
+The buffer uses the test circuit's new `r_source`: with the ideal source, a plain wire is already a
+perfect buffer. A search *variant* (`benchmarks/variants/*.toml`) supplies the search settings;
+`acd bench compare` builds a scoreboard across variants. The suite's runs are also the data source
+for the subgraph miner (see the plan).
+
 ## Evaluation robustness
 
 The comparison surfaced two simulator failures that would have corrupted results:
@@ -161,5 +177,6 @@ Both came from BJT models without series resistance, so a junction across an ide
 1. **Flat v1 (current):** circuit graph, netlist export, graph validity checks, ngspice wrapper, staged evaluation, mutation-only GA with a seed circuit, at most 10 components, result caching, spec-mask and curve targets.
 2. **Better search:** an inner sizing loop for each topology, speciation, subgraph-swap crossover.
 3. **Multi-objective:** NSGA-II over response error, power and component count.
-4. **Component library:** mine recurring subgraphs into blocks and use blocks as components (see the block sections above).
-5. **Output:** LTspice export of the best circuits for checking and schematic viewing.
+4. **Benchmark suite (done) and an archive of good circuits** from its runs, as data for the miner.
+5. **Component library:** mine recurring subgraphs into blocks and use blocks as components, with block-level mutation and crossover (see the block sections above).
+6. **Output:** LTspice export of the best circuits for checking and schematic viewing.

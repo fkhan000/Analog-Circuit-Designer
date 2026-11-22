@@ -1,0 +1,15 @@
+# High-gain amplifier: 40 dB (x100) +-1 dB from 1 kHz to 50 kHz, below 20 dB by 10 MHz.
+# More gain than one simple transistor stage usually gives with these models.
+name = "amplifier 40 dB"
+type = "mask"
+
+[[band]]
+f_lo = 1e3
+f_hi = 50e3
+min_db = 39
+max_db = 41
+
+[[band]]
+f_lo = 10e6
+f_hi = 50e6
+max_db = 20

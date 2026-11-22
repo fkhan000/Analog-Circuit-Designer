@@ -37,6 +37,27 @@ uv run acd eval tests/fixtures/ce_amp.cir --target targets/amp_20db.toml
 uv run acd testbench tests/fixtures/ce_amp.cir  # full netlist; runs as-is in ngspice
 ```
 
+### Benchmarks
+
+`benchmarks/suite.toml` holds 10 targets: passive filters (low-, high-, band-pass, notch), unusual
+responses (pink-noise slope, sine on a Bode plot) and circuits that need transistors (20 and 40 dB
+amplifiers, low-pass with gain, a buffer driven from a 10 kOhm source). A *variant* file in
+`benchmarks/variants/` holds the search settings to evaluate; every benchmark and seed gets the
+same time limit.
+
+```sh
+uv run acd bench run benchmarks/suite.toml --variant benchmarks/variants/sizing.toml
+#   10 benchmarks x 3 seeds x 60 s = 30 min; writes results/bench/standard_sizing_<time>/
+uv run acd bench run benchmarks/suite.toml --variant benchmarks/variants/combo.toml \
+    --only notch-1k,buffer --seeds 1 --time-limit 30          # a quick subset
+uv run acd bench compare results/bench/standard_baseline_* results/bench/standard_sizing_*
+```
+
+Each benchmark output directory has `summary.md` (mean and best error per benchmark, how many
+seeds met the mask), `results.jsonl`, one plot per benchmark, and every run's full output.
+
+### Run output
+
 Each run writes `runs/<timestamp>_<name>/`:
 
 | File | Contents |

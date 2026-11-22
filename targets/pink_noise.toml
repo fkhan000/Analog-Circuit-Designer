@@ -1,0 +1,7 @@
+# "Pink noise" filter: gain falls 3 dB per octave (10 dB per decade) from 10 Hz to 10 kHz,
+# turning white noise into pink noise. No integer-order filter has that slope; analog designs
+# approximate it with staggered RC sections.
+name = "pink noise (-3 dB/octave)"
+type = "curve"
+freq_hz = [10, 12.5893, 15.8489, 19.9526, 25.1189, 31.6228, 39.8107, 50.1187, 63.0957, 79.4328, 100, 125.893, 158.489, 199.526, 251.189, 316.228, 398.107, 501.187, 630.957, 794.328, 1000, 1258.93, 1584.89, 1995.26, 2511.89, 3162.28, 3981.07, 5011.87, 6309.57, 7943.28, 10000]
+gain_db = [-0, -1, -2, -3, -4, -5, -6, -7, -8, -9, -10, -11, -12, -13, -14, -15, -16, -17, -18, -19, -20, -21, -22, -23, -24, -25, -26, -27, -28, -29, -30]

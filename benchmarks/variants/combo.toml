@@ -1,0 +1,13 @@
+# Sizing plus speciation plus crossover.
+workers = 0
+
+[ga]
+population_size = 100
+elite_count = 4
+tournament_size = 4
+speciation = true
+crossover_rate = 0.3
+
+[sizing]
+enabled = true
+budget = 40

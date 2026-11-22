@@ -1,0 +1,19 @@
+# Band-pass around 10 kHz: within 3 dB from 8 to 12.5 kHz, at least 20 dB down a decade away.
+name = "bandpass 10 kHz"
+type = "mask"
+
+[[band]]
+f_lo = 8e3
+f_hi = 12.5e3
+min_db = -3
+max_db = 0.5
+
+[[band]]
+f_lo = 10
+f_hi = 1e3
+max_db = -20
+
+[[band]]
+f_lo = 100e3
+f_hi = 1e6
+max_db = -20

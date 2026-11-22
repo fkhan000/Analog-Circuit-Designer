@@ -1,0 +1,61 @@
+# The standard benchmark suite: passive filters, active circuits and unusual responses.
+# Run a search variant over all of it with:  uv run acd bench run benchmarks/suite.toml --variant ...
+name = "standard"
+seeds = [1, 2, 3]
+time_limit_s = 60
+
+[testbench]
+points_per_decade = 50   # dense enough that sharp notches and peaks can't hide between points
+
+# --- passive-feasible filters -----------------------------------------------------------------
+[[benchmark]]
+name = "lowpass-1k"
+target = "../targets/lowpass_1k.toml"
+note = "first-order RC only just meets it"
+
+[[benchmark]]
+name = "highpass-10k"
+target = "../targets/highpass_10k.toml"
+note = "needs second order"
+
+[[benchmark]]
+name = "bandpass-10k"
+target = "../targets/bandpass_10k.toml"
+
+[[benchmark]]
+name = "notch-1k"
+target = "../targets/notch_1k.toml"
+note = "deep, narrow notch"
+
+# --- unusual responses ------------------------------------------------------------------------
+[[benchmark]]
+name = "pink-noise"
+target = "../targets/pink_noise.toml"
+note = "-3 dB/octave: no integer-order filter has this slope"
+
+[[benchmark]]
+name = "sine-log"
+target = "../targets/sine_log.toml"
+
+# --- needs transistors -------------------------------------------------------------------------
+[[benchmark]]
+name = "amp-20db"
+target = "../targets/amp_20db.toml"
+
+[[benchmark]]
+name = "amp-40db"
+target = "../targets/amp_40db.toml"
+
+[[benchmark]]
+name = "lowpass-gain"
+target = "../targets/lowpass_gain.toml"
+note = "gain and filtering together"
+
+[[benchmark]]
+name = "buffer"
+target = "../targets/buffer.toml"
+note = "10k source into a 1k load"
+
+[benchmark.testbench]
+r_source = 10e3
+r_load = 1e3

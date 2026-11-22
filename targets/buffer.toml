@@ -1,0 +1,11 @@
+# Buffer: unity gain (+-1 dB) from 100 Hz to 1 MHz, measured from a 10 kOhm source into a
+# 1 kOhm load (set in the benchmark's test circuit). Without an active stage the 10k/1k divider
+# alone loses 21 dB, so this needs a buffer or a stage with gain.
+name = "buffer (10k source, 1k load)"
+type = "mask"
+
+[[band]]
+f_lo = 100
+f_hi = 1e6
+min_db = -1
+max_db = 1

@@ -1,0 +1,15 @@
+# Low-pass with gain: 10 dB +-1 dB up to 1 kHz, below -10 dB from 20 kHz.
+# Passive circuits can't add gain, so this needs an active stage that also filters.
+name = "lowpass with 10 dB gain"
+type = "mask"
+
+[[band]]
+f_lo = 10
+f_hi = 1e3
+min_db = 9
+max_db = 11
+
+[[band]]
+f_lo = 20e3
+f_hi = 200e3
+max_db = -10
