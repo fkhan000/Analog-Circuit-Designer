@@ -1,0 +1,8 @@
+* The GA's first 20 dB amplifier: a PMOS common-source stage (M4) whose gate is biased through a
+* second PMOS (M5) sitting just above threshold at a few picoamps. That only works because level-1
+* MOSFETs have no subthreshold current, so M5 should be classified STARVED, not active.
+.subckt dut VIN VOUT VDD
+C1 VIN n2 15n
+M4 VOUT n2 VDD VDD PMOS_GEN W=2.34u L=5.79u
+M5 0 VOUT n2 VDD PMOS_GEN W=0.5u L=7.16u
+.ends dut

@@ -15,7 +15,13 @@ import numpy as np
 
 from acd.circuit.graph import Circuit
 from acd.circuit.validity import Violation, check
-from acd.evaluation.metrics import OperatingPoint, Response, operating_point, response
+from acd.evaluation.metrics import (
+    BiasRules,
+    OperatingPoint,
+    Response,
+    operating_point,
+    response,
+)
 from acd.evaluation.testbench import TestbenchConfig, build_testbench
 from acd.sim.backend import SimStatus, Simulator
 
@@ -42,7 +48,12 @@ class Evaluation:
         return replace(self, response=None)
 
 
-def evaluate(circuit: Circuit, simulator: Simulator, config: TestbenchConfig) -> Evaluation:
+def evaluate(
+    circuit: Circuit,
+    simulator: Simulator,
+    config: TestbenchConfig,
+    rules: BiasRules | None = None,
+) -> Evaluation:
     violations = check(circuit, config.port_context())
     if violations:
         reason = "+".join(sorted({str(v.kind) for v in violations}))
@@ -59,7 +70,7 @@ def evaluate(circuit: Circuit, simulator: Simulator, config: TestbenchConfig) ->
         )  # fmt: skip
 
     try:
-        op = operating_point(result, tb)
+        op = operating_point(result, tb, rules)
         resp = response(result, tb)
     except KeyError as e:
         return Evaluation(

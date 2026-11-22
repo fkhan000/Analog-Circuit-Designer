@@ -6,13 +6,14 @@ target-independent metrics. ``fitness.score`` compares those with a target.
 
 from acd.evaluation.cache import EvaluationCache
 from acd.evaluation.fitness import FitnessWeights, Objectives, score
-from acd.evaluation.metrics import OperatingPoint, Region, Response, summarize
+from acd.evaluation.metrics import BiasRules, OperatingPoint, Region, Response, summarize
 from acd.evaluation.stages import Evaluation, Stage, evaluate
 from acd.evaluation.targets import Band, CurveTarget, MaskTarget, Target, load_target
 from acd.evaluation.testbench import TestbenchConfig, build_testbench
 
 __all__ = [
     "Band",
+    "BiasRules",
     "CurveTarget",
     "Evaluation",
     "EvaluationCache",
