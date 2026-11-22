@@ -24,7 +24,7 @@ import platform
 import shutil
 import subprocess
 import tomllib
-from collections import Counter
+from collections import Counter, OrderedDict
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -33,7 +33,12 @@ from typing import Any
 import numpy as np
 
 import acd
-from acd.circuit.canonical import full_hash, topology_hash
+from acd.circuit.canonical import (
+    feature_distance,
+    full_hash,
+    structure_features,
+    topology_hash,
+)
 from acd.circuit.devices import Kind
 from acd.circuit.graph import Circuit
 from acd.circuit.netlist import from_subckt, to_subckt
@@ -279,6 +284,7 @@ class CircuitProblem:
         self.ops: Counter[str] = Counter()
         self.crossover_rejections: Counter[str] = Counter()
         self._to_size: set[str] = set()  # keys of new children whose values should be tuned
+        self._features: OrderedDict[str, Counter[str]] = OrderedDict()  # topology -> features
 
     def _mark(self, child: Circuit, parent: Circuit | None) -> None:
         sizing = self.config.sizing
@@ -323,6 +329,18 @@ class CircuitProblem:
 
     def key(self, genome: Circuit) -> str:
         return full_hash(genome)
+
+    def _structure(self, c: Circuit) -> Counter[str]:
+        key = topology_hash(c)
+        features = self._features.get(key)
+        if features is None:
+            features = self._features[key] = structure_features(c)
+            if len(self._features) > 50_000:
+                self._features.popitem(last=False)
+        return features
+
+    def distance(self, a: Circuit, b: Circuit) -> float:
+        return feature_distance(self._structure(a), self._structure(b))
 
 
 # ---------------------------------------------------------------------- running
@@ -410,6 +428,7 @@ def run_experiment(
                 "crossover_rejections": dict(problem.crossover_rejections),
                 "cache_hit_rate": evaluator.cache.hit_rate,
                 "simulated_total": evaluator.simulated,
+                "species": stats.species,
                 "sized": evaluator.last_sized,
                 "sizing_gain": evaluator.last_sizing_gain,
             }
@@ -423,6 +442,7 @@ def run_experiment(
                     f"gen {stats.generation:4d}  best {stats.best_fitness:10.4g}  "
                     f"median {stats.median_fitness:10.4g}  parts {len(best.genome):2d}  "
                     f"new {stats.evaluated:4d}  sized {evaluator.last_sized:4d}  "
+                    f"species {stats.species:3d}  "
                     f"sims {evaluator.simulated:8d}  "
                     f"{stats.elapsed_s:6.2f}s"
                 )

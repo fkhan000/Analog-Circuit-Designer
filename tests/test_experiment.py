@@ -110,21 +110,22 @@ def test_cli_eval_reports_invalid_circuit(
 
 
 @pytest.mark.ngspice
-def test_sizing_is_used_and_reproducible(tmp_path: Path) -> None:
+def test_sizing_and_speciation_are_reproducible(tmp_path: Path) -> None:
     def run_with(workers: int) -> tuple[float, int, list[int]]:
         config = config_from_dict(
             {
                 "target": MASK,
                 "workers": workers,
-                "ga": {"population_size": 8, "generations": 2, "seed": 4},
                 "mutation": {"kinds": ["R", "C"]},
                 "sizing": {"enabled": True, "budget": 12},
+                "ga": {"population_size": 8, "generations": 2, "seed": 4, "speciation": True},
             },
             tmp_path,
         )
         out = run_experiment(config, out_root=tmp_path / f"runs{workers}", log=None)
         log = [json.loads(x) for x in (out.run_dir / "log.jsonl").read_text().splitlines()]
         sims = json.loads((out.run_dir / "summary.json").read_text())["simulated"]
+        assert all(rec["species"] >= 1 for rec in log)
         return out.result.best.fitness, sims, [rec["sized"] for rec in log]
 
     serial, parallel = run_with(1), run_with(2)
