@@ -37,6 +37,19 @@ uv run acd eval tests/fixtures/ce_amp.cir --target targets/amp_20db.toml
 uv run acd testbench tests/fixtures/ce_amp.cir  # full netlist; runs as-is in ngspice
 ```
 
+### Web UI
+
+```sh
+uv run acd ui --open        # http://127.0.0.1:8765 (this machine only)
+```
+
+Draw the gain you want against frequency (freehand, or start from a preset), pick a time limit,
+maximum part count and allowed part types, and press **Find a circuit**. The chart shows the best
+circuit's response over your drawing as the search improves it; the result shows the parts, how
+they connect, the phase response and the SPICE netlist (with downloads). **Stop** keeps the best
+circuit so far. Runs are saved under `runs/ui/`. Longer searches do noticeably better: on the sine
+benchmark the error kept falling well past the 2-minute mark.
+
 ### Benchmarks
 
 `benchmarks/suite.toml` holds 10 targets: passive filters (low-, high-, band-pass, notch), unusual
