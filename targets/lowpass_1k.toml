@@ -1,0 +1,15 @@
+# Low-pass: flat to 500 Hz, at least 20 dB down from 10 kHz.
+# A first-order RC with a 1 kHz corner only just meets this; a second-order filter meets it easily.
+name = "lowpass 1 kHz"
+type = "mask"
+
+[[band]]
+f_lo = 10
+f_hi = 500
+min_db = -1
+max_db = 0.5
+
+[[band]]
+f_lo = 10e3
+f_hi = 100e3
+max_db = -20
