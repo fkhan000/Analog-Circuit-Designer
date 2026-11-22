@@ -1,0 +1,22 @@
+# Quick sanity run: passive parts are enough for this target.
+name = "lowpass-1k"
+target = "../targets/lowpass_1k.toml"
+workers = 0                     # 0 = one worker per CPU core minus one
+
+[ga]
+population_size = 100
+generations = 40
+elite_count = 2
+tournament_size = 3
+seed = 1
+stall_generations = 25
+
+[mutation]
+max_components = 10
+kinds = ["R", "C"]
+
+[weights]
+response = 1.0
+power_per_mw = 0.1
+per_component = 0.05
+bias = 2.0

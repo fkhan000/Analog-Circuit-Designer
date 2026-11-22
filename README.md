@@ -23,3 +23,30 @@ uv run pytest                  # tests (ngspice tests are skipped if the library
 uv run ruff check . && uv run ruff format --check .
 uv run mypy
 ```
+
+## Usage
+
+```sh
+uv run acd run configs/lowpass_1k.toml          # passive target, ~3 s
+uv run acd run configs/amp_20db.toml            # needs transistors, ~12 s on 12 cores
+uv run acd run configs/amp_20db.toml --generations 300 --seed 7 --workers 4
+
+uv run acd eval tests/fixtures/ce_amp.cir --target targets/amp_20db.toml
+uv run acd testbench tests/fixtures/ce_amp.cir  # full netlist; runs as-is in ngspice
+```
+
+Each run writes `runs/<timestamp>_<name>/`:
+
+| File | Contents |
+|---|---|
+| `best.cir` | best circuit as a `.subckt` |
+| `best_testbench.cir` | complete netlist for the best circuit, ready to simulate |
+| `best_response.csv` | its frequency response (`freq_hz, gain_db, phase_deg`) |
+| `summary.json` | final objectives, response summary, operating point per transistor |
+| `log.jsonl` | one line per generation: fitness, why candidates failed, why mutations were rejected |
+| `top/rank<N>.cir` | the five best circuits in the final population |
+
+Configs are TOML: see `configs/` for every section (`[ga]`, `[mutation]`, `[testbench]`,
+`[weights]`) and `targets/` for spec-mask and curve targets. Unknown keys are errors, so typos
+don't get silently ignored. Circuits for `seed_circuits` or `acd eval` are `.subckt` files like
+those in `tests/fixtures/`.

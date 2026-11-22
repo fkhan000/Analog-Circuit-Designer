@@ -107,6 +107,13 @@ A good topology with poorly chosen component values scores badly and gets droppe
   - later, possibly sensitivity or robustness
 - **Use NSGA-II (for example `pymoo`) to get a Pareto front** instead of tuning weights for a weighted sum.
 
+## Findings from the first runs
+
+- **Simulation cost is small.** In-process ngspice runs `.op` + `.ac` (200 frequency points) on a 7-transistor circuit in under 1 ms, and a 100-circuit generation takes about 0.04 s on 11 worker processes. Separate `.op` and `.ac` calls aren't worth it: ngspice already skips `.ac` when the operating point fails.
+- **Mutations mostly produce valid circuits:** about 79% pass the graph checks on the first try, 1.3 attempts on average. The most common rejection is a disconnected VIN or VOUT.
+- **Both example targets are met.** The low-pass mask gives a 2-part RC in about 3 s. The 20 dB amplifier mask gives a 3-part PMOS amplifier in about 12 s.
+- **The GA exploits model weaknesses.** The amplifier biases itself through a PMOS conducting 4 pA, which works only because level-1 MOSFETs have no subthreshold current. Next fix: require a minimum current (or current density) for a transistor to count as active in the bias score.
+
 ## Resolved: what "nonlinear" means for the fitness
 
 **Small-signal first, large-signal later.** v1 measures behavior around a bias point with `.op` + `.ac`. Large-signal behavior (distortion/THD, clipping, oscillators) needs `.tran` + FFT, which is roughly 10–100× more expensive, and will be added as another evaluation stage with its own metrics.
