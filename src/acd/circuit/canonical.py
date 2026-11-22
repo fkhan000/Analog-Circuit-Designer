@@ -9,6 +9,8 @@ must be exact (such as the evaluation cache) should confirm a hash match with ``
 
 from __future__ import annotations
 
+from collections import Counter
+
 import networkx as nx
 
 from acd.circuit.devices import spec
@@ -72,3 +74,30 @@ def isomorphic(a: Circuit, b: Circuit, *, with_values: bool = True) -> bool:
             edge_match=lambda x, y: x["label"] == y["label"],
         )
     )
+
+
+def structure_features(circuit: Circuit, iterations: int = 2) -> Counter[str]:
+    """Multiset of the circuit's local structures: each node's Weisfeiler-Lehman subtree labels.
+
+    A node's label after ``k`` iterations describes its neighborhood up to ``k`` hops away (which
+    component types meet at a net, which pins, which ports). Component values are ignored.
+    """
+    g = to_graph(circuit, with_values=False)
+    hashes = nx.weisfeiler_lehman_subgraph_hashes(
+        g,
+        node_attr="label",
+        edge_attr="label",
+        iterations=iterations,
+        include_initial_labels=True,
+    )
+    return Counter(h for per_node in hashes.values() for h in per_node)
+
+
+def feature_distance(a: Counter[str], b: Counter[str]) -> float:
+    """Multiset Jaccard distance: 0 for identical structure, 1 for nothing in common."""
+    union = sum((a | b).values())
+    return 1.0 - sum((a & b).values()) / union if union else 0.0
+
+
+def structural_distance(a: Circuit, b: Circuit) -> float:
+    return feature_distance(structure_features(a), structure_features(b))

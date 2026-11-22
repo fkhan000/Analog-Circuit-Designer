@@ -1,6 +1,6 @@
 from hypothesis import given
 
-from acd.circuit.canonical import full_hash, isomorphic, topology_hash
+from acd.circuit.canonical import full_hash, isomorphic, structural_distance, topology_hash
 from acd.circuit.devices import Kind
 from acd.circuit.graph import Circuit, Component
 from acd.circuit.ports import GND, VDD, VIN, VOUT
@@ -58,3 +58,24 @@ def test_diode_connection_differs_from_separate_nets() -> None:
 def test_hash_ignores_component_order(c: Circuit) -> None:
     reordered = Circuit(tuple(reversed(c.components)), next_id=c.next_id)
     assert full_hash(c) == full_hash(reordered)
+
+
+def test_structural_distance() -> None:
+    a = ce(VOUT, "n1")
+    assert structural_distance(a, a) == 0.0
+    assert structural_distance(a, ce(VOUT, "n1", r=4.7e3)) == 0.0  # values don't matter
+    renamed = Circuit(tuple(reversed(a.components)))
+    assert structural_distance(a, renamed) == 0.0
+    swapped = ce("n1", VOUT)
+    other = Circuit((Component("c1", Kind.C, (VIN, VOUT), (1e-9,)),))
+    d_near, d_far = structural_distance(a, swapped), structural_distance(a, other)
+    assert 0 < d_near < d_far <= 1.0
+    assert structural_distance(other, a) == d_far  # symmetric
+
+
+@given(circuits(), circuits())
+def test_distance_bounds(a: Circuit, b: Circuit) -> None:
+    d = structural_distance(a, b)
+    assert 0.0 <= d <= 1.0
+    if topology_hash(a) == topology_hash(b):
+        assert d == 0.0

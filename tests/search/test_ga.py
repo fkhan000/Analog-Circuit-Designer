@@ -27,6 +27,9 @@ class Parabola:
     def key(self, genome: float) -> str:
         return f"{genome:.3f}"
 
+    def distance(self, a: float, b: float) -> float:
+        return min(1.0, abs(a - b) / 10)
+
 
 def test_converges_on_toy_problem() -> None:
     result = run(Parabola(), GAConfig(population_size=30, generations=60, seed=0))

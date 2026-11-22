@@ -8,12 +8,17 @@ Lower fitness is better. Each generation keeps ``elite_count`` best individuals 
 with children of tournament-selected parents, skipping children already in the population. A child
 comes from crossover of two parents with probability ``crossover_rate`` (then is mutated with
 probability ``mutate_after_crossover``); otherwise, or if crossover fails, from mutation.
+
+With ``speciation`` on, the population is split into species of structurally similar genomes
+(see ``speciation.py``): each species gets a share of the children, parents and mates are chosen
+within a species, and each species' champion survives unchanged.
 """
 
 from __future__ import annotations
 
 import statistics
 import time
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Protocol
@@ -21,6 +26,7 @@ from typing import Any, Protocol
 import numpy as np
 
 from acd.search.selection import tournament
+from acd.search.speciation import Speciator
 
 
 @dataclass(frozen=True)
@@ -36,6 +42,10 @@ class GAConfig:
     crossover_rate: float = 0.0  # probability that a child comes from crossover
     mutate_after_crossover: float = 0.5  # probability a crossover child is also mutated
     time_limit_s: float | None = None  # stop starting new generations after this much time
+    speciation: bool = False
+    species_target: int = 8  # the compatibility threshold adapts to keep about this many species
+    species_threshold: float = 0.5  # starting compatibility threshold (distance in [0, 1])
+    species_stagnation: int = 30  # generations without improvement before a species stops breeding
 
     def __post_init__(self) -> None:
         for name in ("crossover_rate", "mutate_after_crossover"):
@@ -67,6 +77,8 @@ class GenerationStats:
     elapsed_s: float
     crossovers: int = 0  # children produced by crossover
     failed_crossovers: int = 0  # crossovers that found no valid child (fell back to mutation)
+    species: int = 0  # live species (0 without speciation)
+    species_threshold: float | None = None
 
 
 @dataclass
@@ -97,6 +109,10 @@ class Problem[G](Protocol):
 
     def key(self, genome: G) -> str: ...
 
+    def distance(self, a: G, b: G) -> float:
+        """Structural distance in [0, 1]; only needed with speciation."""
+        ...
+
 
 GenerationCallback = Callable[[GenerationStats, list[Individual[Any]]], None]
 
@@ -113,6 +129,40 @@ def _evaluate[G](
     return out
 
 
+def _make_child[G](
+    problem: Problem[G],
+    members: list[Individual[G]],
+    config: GAConfig,
+    rng: np.random.Generator,
+    taken: set[str],
+    counts: Counter[str],
+) -> tuple[G, str]:
+    """A child of tournament-selected parents from ``members``, preferably not in ``taken``."""
+    parent = tournament(members, config.tournament_size, rng)
+    child, key = parent.genome, parent.key
+    for _ in range(config.max_child_attempts):
+        candidate: G | None = None
+        if config.crossover_rate and rng.random() < config.crossover_rate:
+            mate = tournament(members, config.tournament_size, rng)
+            candidate = problem.crossover(parent.genome, mate.genome, rng)
+            if candidate is None:
+                counts["failed_crossovers"] += 1
+            else:
+                counts["crossovers"] += 1
+                if rng.random() < config.mutate_after_crossover:
+                    candidate = problem.mutate(candidate, rng) or candidate
+        if candidate is None:
+            candidate = problem.mutate(parent.genome, rng)
+        if candidate is None:
+            counts["failed_mutations"] += 1
+            continue
+        child, key = candidate, problem.key(candidate)
+        if key not in taken:
+            break
+        counts["duplicates"] += 1
+    return child, key
+
+
 def run[G](
     problem: Problem[G], config: GAConfig, on_generation: GenerationCallback | None = None
 ) -> GAResult[G]:
@@ -125,27 +175,35 @@ def run[G](
     population.sort(key=lambda ind: ind.fitness)
     best = population[0]
     history: list[GenerationStats] = []
+    speciator: Speciator[G] | None = None
+    if config.speciation:
+        speciator = Speciator(
+            problem.distance,
+            config.species_threshold,
+            config.species_target,
+            config.species_stagnation,
+        )
+        speciator.assign(population, 0)
 
-    def record(
-        gen: int, evaluated: int, dups: int, failed: int, t0: float, crossed: int = 0,
-        failed_x: int = 0,
-    ) -> None:  # fmt: skip
+    def record(gen: int, t0: float, counts: Counter[str]) -> None:
         stats = GenerationStats(
             generation=gen,
             best_fitness=best.fitness,
             median_fitness=statistics.median(ind.fitness for ind in population),
-            evaluated=evaluated,
-            duplicates=dups,
-            failed_mutations=failed,
+            evaluated=counts["evaluated"],
+            duplicates=counts["duplicates"],
+            failed_mutations=counts["failed_mutations"],
             elapsed_s=time.perf_counter() - t0,
-            crossovers=crossed,
-            failed_crossovers=failed_x,
+            crossovers=counts["crossovers"],
+            failed_crossovers=counts["failed_crossovers"],
+            species=len(speciator.species) if speciator else 0,
+            species_threshold=speciator.threshold if speciator else None,
         )
         history.append(stats)
         if on_generation:
             on_generation(stats, population)
 
-    record(0, len(population), 0, 0, start)
+    record(0, start, Counter(evaluated=len(population)))
     stall = 0
     stopped = "generations"
     for gen in range(1, config.generations + 1):
@@ -161,36 +219,30 @@ def run[G](
 
         t0 = time.perf_counter()
         elites = population[: config.elite_count]
+        pools: list[tuple[list[Individual[G]], int]]
+        if speciator:
+            kept = {id(e) for e in elites}
+            champions = [
+                s.members[0]
+                for s in speciator.species
+                if len(s.members) >= 2 and id(s.members[0]) not in kept
+            ]
+            elites = [*elites, *champions][: config.population_size // 2]
+            n_children = config.population_size - len(elites)
+            pools = [(s.members, q) for s, q in speciator.allocate(n_children, gen)]
+        else:
+            pools = [(population, config.population_size - len(elites))]
+
         taken = {ind.key for ind in population}
         children: list[G] = []
         child_keys: list[str] = []
-        dups = failed = crossed = failed_x = 0
-        while len(children) < config.population_size - len(elites):
-            parent = tournament(population, config.tournament_size, rng)
-            child, key = parent.genome, parent.key
-            for _ in range(config.max_child_attempts):
-                candidate: G | None = None
-                if config.crossover_rate and rng.random() < config.crossover_rate:
-                    mate = tournament(population, config.tournament_size, rng)
-                    candidate = problem.crossover(parent.genome, mate.genome, rng)
-                    if candidate is None:
-                        failed_x += 1
-                    else:
-                        crossed += 1
-                        if rng.random() < config.mutate_after_crossover:
-                            candidate = problem.mutate(candidate, rng) or candidate
-                if candidate is None:
-                    candidate = problem.mutate(parent.genome, rng)
-                if candidate is None:
-                    failed += 1
-                    continue
-                child, key = candidate, problem.key(candidate)
-                if key not in taken:
-                    break
-                dups += 1
-            taken.add(key)
-            children.append(child)
-            child_keys.append(key)
+        counts: Counter[str] = Counter()
+        for members, quota in pools:
+            for _ in range(quota):
+                child, key = _make_child(problem, members, config, rng, taken, counts)
+                taken.add(key)
+                children.append(child)
+                child_keys.append(key)
 
         offspring = _evaluate(problem, children, child_keys, gen)
         population = sorted([*elites, *offspring], key=lambda ind: ind.fitness)
@@ -199,6 +251,9 @@ def run[G](
             stall = 0
         else:
             stall += 1
-        record(gen, len(offspring), dups, failed, t0, crossed, failed_x)
+        if speciator:
+            speciator.assign(population, gen)
+        counts["evaluated"] = len(offspring)
+        record(gen, t0, counts)
 
     return GAResult(best, population, history, stopped)
