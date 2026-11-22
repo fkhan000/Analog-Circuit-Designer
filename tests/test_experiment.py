@@ -107,3 +107,28 @@ def test_cli_eval_reports_invalid_circuit(
     bad.write_text(".subckt dut VIN VOUT VDD\nR1 VIN 0 1k\n.ends\n")
     assert main(["eval", str(bad)]) == 1
     assert "port_unconnected" in capsys.readouterr().out
+
+
+@pytest.mark.ngspice
+def test_sizing_is_used_and_reproducible(tmp_path: Path) -> None:
+    def run_with(workers: int) -> tuple[float, int, list[int]]:
+        config = config_from_dict(
+            {
+                "target": MASK,
+                "workers": workers,
+                "ga": {"population_size": 8, "generations": 2, "seed": 4},
+                "mutation": {"kinds": ["R", "C"]},
+                "sizing": {"enabled": True, "budget": 12},
+            },
+            tmp_path,
+        )
+        out = run_experiment(config, out_root=tmp_path / f"runs{workers}", log=None)
+        log = [json.loads(x) for x in (out.run_dir / "log.jsonl").read_text().splitlines()]
+        sims = json.loads((out.run_dir / "summary.json").read_text())["simulated"]
+        return out.result.best.fitness, sims, [rec["sized"] for rec in log]
+
+    serial, parallel = run_with(1), run_with(2)
+    assert serial == parallel  # sizing is seeded from each circuit, not from the worker
+    _, sims, sized = serial
+    assert sized[0] == 8  # the whole initial population is sized
+    assert sims > 8 + 2 * 7  # far more simulations than individuals

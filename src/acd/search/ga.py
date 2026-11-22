@@ -2,6 +2,8 @@
 
 The problem supplies the operations (initial population, mutate, crossover, evaluate, key), so the
 circuit code never leaks in here and this loop could later be swapped for a multi-objective one.
+``evaluate`` may return a replacement genome (Lamarckian evolution: a genome whose values were
+tuned during evaluation passes the tuned values on to its children).
 Lower fitness is better. Each generation keeps ``elite_count`` best individuals and fills the rest
 with children of tournament-selected parents, skipping children already in the population. A child
 comes from crossover of two parents with probability ``crossover_rate`` (then is mutated with
@@ -33,6 +35,7 @@ class GAConfig:
     max_child_attempts: int = 10  # tries to produce a child not already in the population
     crossover_rate: float = 0.0  # probability that a child comes from crossover
     mutate_after_crossover: float = 0.5  # probability a crossover child is also mutated
+    time_limit_s: float | None = None  # stop starting new generations after this much time
 
     def __post_init__(self) -> None:
         for name in ("crossover_rate", "mutate_after_crossover"):
@@ -74,6 +77,15 @@ class GAResult[G]:
     stopped_because: str = ""
 
 
+@dataclass(frozen=True)
+class Outcome[G]:
+    """What evaluating one genome produced."""
+
+    fitness: float
+    info: Any = None
+    genome: G | None = None  # replacement genome (e.g. with tuned values) if evaluation changed it
+
+
 class Problem[G](Protocol):
     def initial_population(self, size: int, rng: np.random.Generator) -> list[G]: ...
 
@@ -81,7 +93,7 @@ class Problem[G](Protocol):
 
     def crossover(self, a: G, b: G, rng: np.random.Generator) -> G | None: ...
 
-    def evaluate(self, genomes: list[G]) -> list[tuple[float, Any]]: ...
+    def evaluate(self, genomes: list[G]) -> list[Outcome[G]]: ...
 
     def key(self, genome: G) -> str: ...
 
@@ -92,11 +104,13 @@ GenerationCallback = Callable[[GenerationStats, list[Individual[Any]]], None]
 def _evaluate[G](
     problem: Problem[G], genomes: list[G], keys: list[str], gen: int
 ) -> list[Individual[G]]:
-    scored = problem.evaluate(genomes)
-    return [
-        Individual(g, fitness, k, info, gen)
-        for g, k, (fitness, info) in zip(genomes, keys, scored, strict=True)
-    ]
+    """Evaluate genomes; a replacement genome from the problem takes the original's place."""
+    out = []
+    for g, k, o in zip(genomes, keys, problem.evaluate(genomes), strict=True):
+        if o.genome is not None:
+            g, k = o.genome, problem.key(o.genome)
+        out.append(Individual(g, o.fitness, k, o.info, gen))
+    return out
 
 
 def run[G](
@@ -140,6 +154,9 @@ def run[G](
             break
         if config.stall_generations is not None and stall >= config.stall_generations:
             stopped = "stalled"
+            break
+        if config.time_limit_s is not None and time.perf_counter() - start >= config.time_limit_s:
+            stopped = "time_limit"
             break
 
         t0 = time.perf_counter()
