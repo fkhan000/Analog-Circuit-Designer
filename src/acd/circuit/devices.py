@@ -17,6 +17,7 @@ class Kind(StrEnum):
     R = "R"
     C = "C"
     L = "L"
+    D = "D"
     NPN = "NPN"
     PNP = "PNP"
     NMOS = "NMOS"
@@ -30,6 +31,8 @@ class PinRole(StrEnum):
     CONTROL = "control"  # gate / base
     OUTPUT = "output"  # drain / collector
     COMMON = "common"  # source / emitter
+    ANODE = "anode"
+    CATHODE = "cathode"
 
 
 @dataclass(frozen=True)
@@ -159,6 +162,7 @@ _MOS_PINS = (
     PinSpec("g", PinRole.CONTROL),
     PinSpec("s", PinRole.COMMON),
 )
+_DIODE_PINS = (PinSpec("a", PinRole.ANODE), PinSpec("k", PinRole.CATHODE))
 _BJT_DC = (("c", "b"), ("b", "e"), ("c", "e"))
 _MOS_DC = (("d", "s"),)
 
@@ -180,6 +184,11 @@ SPECS: dict[Kind, DeviceSpec] = {
     Kind.L: DeviceSpec(
         Kind.L, "L", _PASSIVE_PINS, True, (("p", "n"),),
         (ParamSpec("l", "H", 1e-9, 10e-3, 1e-6, ESeries(12)),),
+    ),
+    # Reverse-biased junctions still give SPICE a DC path (gmin), so a-k counts as one.
+    Kind.D: DeviceSpec(
+        Kind.D, "D", _DIODE_PINS, False, (("a", "k"),),
+        (ParamSpec("m", "", 1, 8, 1, Grid(1)),), model="D_GEN",
     ),
     Kind.NPN: DeviceSpec(Kind.NPN, "Q", _BJT_PINS, False, _BJT_DC, _BJT_PARAMS, model="NPN_GEN"),
     Kind.PNP: DeviceSpec(Kind.PNP, "Q", _BJT_PINS, False, _BJT_DC, _BJT_PARAMS, model="PNP_GEN"),

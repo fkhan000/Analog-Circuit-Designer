@@ -4,7 +4,7 @@ Status: v1 in progress. These notes record the design decisions and open questio
 
 ## v1 scope and decisions
 
-- **Flat GA, at most 10 components per circuit**, built from single parts only: R, C, NPN, PNP, NMOS, PMOS. Inductors are supported but disabled by default.
+- **Flat GA, at most 10 components per circuit**, built from single parts only: R, C, L, diodes, NPN, PNP, NMOS, PMOS. All are enabled by default; an experiment can restrict them with `[mutation] kinds` (e.g. no inductors for on-chip designs).
 - **Building blocks and a learned component library are deferred.** Once flat search works, the plan is to mine recurring subgraphs from good circuits into a library and use library blocks as components. The sections below that mention blocks describe that later stage.
 - **Fitness is small-signal for now:** `.op` + `.ac`. Large-signal analysis (`.tran`, THD) comes later as an extra evaluation stage.
 - **Both BJTs and MOSFETs**, using simple generic models (Gummel-Poon BJT, level-1 MOSFET) for the search. Detailed models are only for checking final circuits.

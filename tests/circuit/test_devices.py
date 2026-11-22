@@ -63,13 +63,15 @@ def test_defaults_are_in_range() -> None:
 
 
 def test_swap_targets_keep_pin_count() -> None:
-    assert set(swap_targets(Kind.R)) == {Kind.C, Kind.L}
+    assert set(swap_targets(Kind.R)) == {Kind.C, Kind.L, Kind.D}
+    assert set(swap_targets(Kind.D)) == {Kind.R, Kind.C, Kind.L}
     assert set(swap_targets(Kind.NPN)) == {Kind.PNP, Kind.NMOS, Kind.PMOS}
 
 
 def test_pin_mapping_by_role() -> None:
     assert pin_mapping(Kind.NPN, Kind.NMOS) == {"c": "d", "b": "g", "e": "s"}
     assert pin_mapping(Kind.R, Kind.C) == {"p": "p", "n": "n"}
+    assert pin_mapping(Kind.R, Kind.D) == {"p": "a", "n": "k"}  # by order: p -> anode
     with pytest.raises(ValueError):
         pin_mapping(Kind.R, Kind.NPN)
 
@@ -78,3 +80,5 @@ def test_dc_paths() -> None:
     assert spec(Kind.C).dc_paths == ()
     assert spec(Kind.NMOS).dc_paths == (("d", "s"),)  # the gate conducts nothing
     assert len(spec(Kind.NPN).dc_paths) == 3
+    assert spec(Kind.D).dc_paths == (("a", "k"),)
+    assert spec(Kind.L).dc_paths == (("p", "n"),)

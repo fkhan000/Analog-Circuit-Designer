@@ -13,7 +13,7 @@ from acd.circuit.netlist import from_subckt
 from acd.circuit.ports import DEFAULT_PORTS
 
 FIXTURES = Path(__file__).parent / "fixtures"
-FIXTURE_NAMES = ("rc_lowpass", "ce_amp", "ota_follower")
+FIXTURE_NAMES = ("rc_lowpass", "ce_amp", "ota_follower", "lc_bandpass", "diode_divider")
 
 
 def load_fixture(name: str) -> Circuit:

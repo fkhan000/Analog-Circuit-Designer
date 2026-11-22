@@ -1,0 +1,7 @@
+* Series R into a parallel LC tank: band-pass peaking at f0 = 1/(2*pi*sqrt(10m * 100n)) = 5.03 kHz,
+* where the tank impedance is highest and the gain reaches ~0 dB. Q = R*sqrt(C/L) = 3.2.
+.subckt dut VIN VOUT VDD
+R1 VIN VOUT 1k
+L2 VOUT 0 10m
+C3 VOUT 0 100n
+.ends dut
