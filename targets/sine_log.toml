@@ -1,0 +1,12 @@
+# Gain follows a sine wave on a Bode plot: two full periods over four decades,
+# swinging between -18 dB and -2 dB. Peaks and notches repeat every two decades.
+name = "sine, log axis"
+type = "sine"
+f_lo = 100
+f_hi = 1e6
+offset_db = -10
+amplitude_db = 8
+periods = 2
+phase_deg = 0
+axis = "log"
+points = 81

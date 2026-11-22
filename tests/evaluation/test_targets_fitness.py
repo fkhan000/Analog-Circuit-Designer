@@ -14,7 +14,15 @@ from acd.evaluation.fitness import (
 )
 from acd.evaluation.metrics import OperatingPoint, Response, summarize
 from acd.evaluation.stages import Evaluation, Stage
-from acd.evaluation.targets import Band, CurveTarget, MaskTarget, load_target
+from acd.evaluation.targets import (
+    Band,
+    CurveTarget,
+    MaskTarget,
+    load_target,
+    sine_curve,
+    target_from_dict,
+    target_to_dict,
+)
 
 
 def first_order_lowpass(fc: float, gain_db: float = 0.0) -> Response:
@@ -95,3 +103,40 @@ def test_fitness_weights() -> None:
     objs = Objectives(response_error_db=2.0, power_w=1e-3, n_components=4, bias_penalty=0.5)
     w = FitnessWeights(response=1, power_per_mw=0.1, per_component=0.05, bias=2)
     assert scalar_fitness(ok, objs, w) == pytest.approx(2.0 + 0.1 + 0.2 + 1.0)
+
+
+def test_sine_target_on_log_axis() -> None:
+    t = load_target(Path(__file__).parents[2] / "targets" / "sine_log.toml")
+    assert isinstance(t, CurveTarget) and len(t.freq_hz) == 81
+    f, g = np.array(t.freq_hz), np.array(t.gain_db)
+    assert f[0] == pytest.approx(100) and f[-1] == pytest.approx(1e6)
+    assert g.max() == pytest.approx(-2, abs=0.05) and g.min() == pytest.approx(-18, abs=0.05)
+    # Two periods over four decades: peaks at 10^2.5 and 10^4.5 Hz.
+    peaks = f[(g > np.roll(g, 1)) & (g > np.roll(g, -1))]
+    assert peaks == pytest.approx([10**2.5, 10**4.5], rel=0.05)
+
+
+def test_sine_target_on_linear_axis() -> None:
+    t = sine_curve(1e3, 2e3, offset_db=0, amplitude_db=1, periods=1, axis="linear", points=5)
+    assert t.freq_hz == pytest.approx((1000, 1250, 1500, 1750, 2000))
+    assert t.gain_db == pytest.approx((0, 1, 0, -1, 0), abs=1e-12)
+
+
+def test_sine_target_rejects_bad_input(tmp_path: Path) -> None:
+    with pytest.raises(ValueError):
+        sine_curve(1e3, 1e2, 0, 1, 1)
+    with pytest.raises(ValueError):
+        sine_curve(1e2, 1e3, 0, 1, 1, axis="sqrt")
+    p = tmp_path / "t.toml"
+    p.write_text('type = "sine"\nf_lo = 1\nf_hi = 10\namplitude_db = 1\nperiod = 2\n')
+    with pytest.raises(ValueError, match="period"):
+        load_target(p)
+
+
+def test_target_dict_round_trip() -> None:
+    mask = MaskTarget((Band(10, 100, max_db=-3), Band(1e3, 1e4, -1, 1, 2.0)), "m")
+    d = target_to_dict(mask)
+    assert "min_db" not in d["band"][0]  # unbounded limits are left out (JSON has no inf)
+    assert target_from_dict(d) == mask
+    curve = sine_curve(1e2, 1e4, -3, 2, 1.5, points=7, name="s")
+    assert target_from_dict(target_to_dict(curve)) == curve

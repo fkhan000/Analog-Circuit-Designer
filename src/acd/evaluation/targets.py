@@ -24,6 +24,18 @@ or a curve, given inline or as a CSV file with columns ``freq_hz,gain_db[,weight
     gain_db = [20, 20, 20]
     # file = "my_curve.csv"   (path relative to the TOML file)
 
+or a sinusoid, which becomes a curve sampled at ``points`` frequencies::
+
+    type = "sine"
+    f_lo = 100
+    f_hi = 1e6
+    offset_db = -10        # gain = offset + amplitude * sin(2 pi * periods * x + phase)
+    amplitude_db = 8
+    periods = 2            # full periods between f_lo and f_hi
+    phase_deg = 0
+    axis = "log"           # x runs 0..1 in log10(f) (a sine on a Bode plot) or in f ("linear")
+    points = 81
+
 Frequencies are plain numbers (``1e3``, not ``"1k"``), which avoids SPICE's ``M`` = milli trap.
 """
 
@@ -116,9 +128,78 @@ class MaskTarget:
 Target = CurveTarget | MaskTarget
 
 
+def sine_curve(
+    f_lo: float,
+    f_hi: float,
+    offset_db: float,
+    amplitude_db: float,
+    periods: float,
+    phase_deg: float = 0.0,
+    axis: str = "log",
+    points: int = 81,
+    name: str = "sine",
+) -> CurveTarget:
+    """A gain curve that is a sinusoid in log or linear frequency."""
+    if not 0 < f_lo < f_hi:
+        raise ValueError("sine target needs 0 < f_lo < f_hi")
+    if axis == "log":
+        freqs = np.geomspace(f_lo, f_hi, points)
+        x = (np.log10(freqs) - math.log10(f_lo)) / (math.log10(f_hi) - math.log10(f_lo))
+    elif axis == "linear":
+        freqs = np.linspace(f_lo, f_hi, points)
+        x = (freqs - f_lo) / (f_hi - f_lo)
+    else:
+        raise ValueError(f"sine axis must be 'log' or 'linear', got {axis!r}")
+    gain = offset_db + amplitude_db * np.sin(2 * math.pi * periods * x + math.radians(phase_deg))
+    return CurveTarget(
+        tuple(float(f) for f in freqs), tuple(float(g) for g in gain), (1.0,) * points, name
+    )
+
+
+_SINE_KEYS = {
+    "f_lo", "f_hi", "offset_db", "amplitude_db", "periods", "phase_deg", "axis", "points",
+}  # fmt: skip
+
+
+def target_to_dict(target: Target) -> dict[str, Any]:
+    """The target in the file schema (sine targets are written out as curves)."""
+    if isinstance(target, MaskTarget):
+        bands = []
+        for b in target.bands:
+            band: dict[str, float] = {"f_lo": b.f_lo, "f_hi": b.f_hi, "weight": b.weight}
+            if math.isfinite(b.min_db):
+                band["min_db"] = b.min_db
+            if math.isfinite(b.max_db):
+                band["max_db"] = b.max_db
+            bands.append(band)
+        return {"name": target.name, "type": "mask", "band": bands}
+    return {
+        "name": target.name,
+        "type": "curve",
+        "freq_hz": list(target.freq_hz),
+        "gain_db": list(target.gain_db),
+        "weight": list(target.weight),
+    }
+
+
 def target_from_dict(data: Mapping[str, Any], base_dir: Path | None = None) -> Target:
     kind = data.get("type")
     name = str(data.get("name", kind or "target"))
+    if kind == "sine":
+        unknown = set(data) - _SINE_KEYS - {"name", "type"}
+        if unknown:
+            raise ValueError(f"unknown keys in sine target: {sorted(unknown)}")
+        return sine_curve(
+            f_lo=float(data["f_lo"]),
+            f_hi=float(data["f_hi"]),
+            offset_db=float(data.get("offset_db", 0.0)),
+            amplitude_db=float(data["amplitude_db"]),
+            periods=float(data.get("periods", 1.0)),
+            phase_deg=float(data.get("phase_deg", 0.0)),
+            axis=str(data.get("axis", "log")),
+            points=int(data.get("points", 81)),
+            name=name,
+        )
     if kind == "mask":
         bands = tuple(
             Band(
@@ -141,7 +222,7 @@ def target_from_dict(data: Mapping[str, Any], base_dir: Path | None = None) -> T
         gains = tuple(float(x) for x in data["gain_db"])
         weights = tuple(float(x) for x in data.get("weight", [1.0] * len(freqs)))
         return CurveTarget(freqs, gains, weights, name)
-    raise ValueError(f"target type must be 'mask' or 'curve', got {kind!r}")
+    raise ValueError(f"target type must be 'mask', 'curve' or 'sine', got {kind!r}")
 
 
 def _curve_from_csv(path: Path, name: str) -> CurveTarget:

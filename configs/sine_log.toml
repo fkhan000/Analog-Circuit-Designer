@@ -1,0 +1,25 @@
+# Non-traditional target: gain is a sine wave on a Bode plot (see targets/sine_log.toml).
+# All component types are allowed; LC resonators are the natural way to make the peaks/notches.
+name = "sine-log"
+target = "../targets/sine_log.toml"
+workers = 0
+
+[ga]
+population_size = 300
+generations = 300
+elite_count = 4
+tournament_size = 4
+seed = 1
+stall_generations = 80
+# Crossover is available but didn't help on this target (3 seeds each: mean RMS error 4.9 dB with
+# crossover_rate 0.3, 3.8 dB without). See DESIGN.md. Seed 1 without crossover reaches 1.74 dB.
+crossover_rate = 0.0
+
+[crossover]
+max_region_size = 4
+
+[mutation]
+max_components = 10
+
+[testbench]
+points_per_decade = 50   # dense enough that sharp resonances can't hide between points
