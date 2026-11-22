@@ -1,4 +1,4 @@
-"""Command-line entry point: ``acd run``, ``bench``, ``eval``, ``plot`` and ``testbench``."""
+"""Command-line entry point: ``acd run``, ``ui``, ``bench``, ``eval``, ``plot``, ``testbench``."""
 
 from __future__ import annotations
 
@@ -95,6 +95,13 @@ def _cmd_bench_compare(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_ui(args: argparse.Namespace) -> int:
+    from acd.ui import serve
+
+    serve(args.port, args.host, args.workers, args.out, args.open)
+    return 0
+
+
 def _cmd_plot(args: argparse.Namespace) -> int:
     from acd.plot import plot_run
 
@@ -140,6 +147,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     p = bench.add_parser("compare", help="scoreboard across benchmark output directories")
     p.add_argument("dirs", nargs="+", type=Path)
     p.set_defaults(func=_cmd_bench_compare)
+
+    p = sub.add_parser("ui", help="web UI: draw a target response and search for a circuit")
+    p.add_argument("--port", type=int, default=8765)
+    p.add_argument("--host", default="127.0.0.1", help="default: only this machine")
+    p.add_argument("--workers", type=int, default=0, help="0 = auto")
+    p.add_argument("--out", type=Path, default=Path("runs/ui"), help="where runs are saved")
+    p.add_argument("--open", action="store_true", help="open the page in a browser")
+    p.set_defaults(func=_cmd_ui)
 
     p = sub.add_parser("eval", help="simulate one circuit (.subckt file) and print its metrics")
     p.add_argument("circuit", type=Path)
