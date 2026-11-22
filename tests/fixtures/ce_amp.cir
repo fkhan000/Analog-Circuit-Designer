@@ -1,0 +1,10 @@
+* Common-emitter amplifier, base driven directly by VIN (DC 1.65 V from the test circuit).
+* Ie ~ (1.65 - 0.71) / 1k ~ 0.94 mA, VOUT ~ 3.3 - 1.2k * 0.93 mA ~ 2.2 V.
+* Midband gain ~ -Rc / (re + Re1) = -1200 / 127.5 ~ -9.4 (19.5 dB) once C5 bypasses R4.
+.subckt dut VIN VOUT VDD
+Q1 VOUT VIN e1 NPN_GEN
+R2 VDD VOUT 1.2k
+R3 e1 e2 100
+R4 e2 0 910
+C5 e2 0 1u
+.ends dut

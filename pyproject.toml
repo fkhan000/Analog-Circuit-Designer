@@ -27,7 +27,8 @@ build-backend = "uv_build"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra"
+pythonpath = ["tests"]
+addopts = "-ra --import-mode=importlib"
 markers = [
     "ngspice: needs the ngspice shared library (skipped when it is not installed)",
 ]
@@ -43,3 +44,6 @@ select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
 python_version = "3.12"
 strict = true
 files = ["src"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["acd", "helpers"]
