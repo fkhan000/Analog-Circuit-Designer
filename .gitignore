@@ -14,6 +14,7 @@ dist/
 
 # Experiment outputs
 runs/
+results/
 
 # OS / editors
 .DS_Store
