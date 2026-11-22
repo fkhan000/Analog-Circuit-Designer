@@ -82,11 +82,13 @@ def test_small_run_writes_outputs(tmp_path: Path, workers: int) -> None:
     assert summary["fitness"] == pytest.approx(outcome.result.best.fitness)
     assert len(list((d / "top").glob("rank*.cir"))) == 5
     assert json.loads((d / "target.json").read_text())["type"] == "mask"
+    pytest.importorskip("matplotlib")
+    png = d / "response.png"  # written automatically at the end of the run
+    assert png.exists() and png.read_bytes()[:4] == b"\x89PNG"
     if workers == 1:
-        pytest.importorskip("matplotlib")
-        assert main(["plot", str(d)]) == 0
-        png = d / "response.png"
-        assert png.exists() and png.read_bytes()[:4] == b"\x89PNG"
+        png.unlink()
+        assert main(["plot", str(d)]) == 0  # and on demand
+        assert png.exists()
 
 
 @pytest.mark.ngspice

@@ -11,6 +11,7 @@ A run writes ``runs/<timestamp>_<name>/`` containing:
   ngspice can run directly (it uses ngspice ``.save`` syntax, so LTspice needs edits);
   ``best_response.csv``: its frequency response
 - ``summary.json``: final metrics; ``top/rank<N>.cir``: the best few distinct circuits
+- ``response.png``: the best circuit's frequency response against the target (needs matplotlib)
 """
 
 from __future__ import annotations
@@ -453,14 +454,27 @@ def run_experiment(
             evaluator.close()
 
     best_eval = _write_results(run_dir, result, config, evaluator)
+    plot = _plot_response(run_dir)
     if log:
         log(f"stopped: {result.stopped_because}; best fitness {result.best.fitness:.4g}")
+        log(f"response plot: {plot}" if plot else "response plot skipped (needs matplotlib)")
         log(f"best circuit ({run_dir / 'best.cir'}):\n{result.best.genome.describe()}")
     return RunOutcome(run_dir, result, best_eval)
 
 
 def _circuit_file(circuit: Circuit, header: Sequence[str]) -> str:
     return "".join(f"* {line}\n" for line in header) + to_subckt(circuit)
+
+
+def _plot_response(run_dir: Path) -> Path | None:
+    """Write ``response.png`` (best response vs. target) if matplotlib is installed."""
+    try:
+        import matplotlib  # noqa: F401
+    except ImportError:
+        return None
+    from acd.plot import plot_run
+
+    return plot_run(run_dir)
 
 
 def _write_results(
