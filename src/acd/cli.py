@@ -10,7 +10,7 @@ from pathlib import Path
 
 from acd.circuit.netlist import from_subckt
 from acd.evaluation.fitness import FitnessWeights, score
-from acd.evaluation.metrics import summarize
+from acd.evaluation.metrics import BiasRules, summarize
 from acd.evaluation.stages import evaluate
 from acd.evaluation.targets import load_target
 from acd.evaluation.testbench import TestbenchConfig, build_testbench
@@ -18,11 +18,13 @@ from acd.experiment import load_config, run_experiment
 from acd.sim.ngspice import Ngspice
 
 
-def _testbench_config(config_path: Path | None) -> tuple[TestbenchConfig, FitnessWeights]:
+def _testbench_config(
+    config_path: Path | None,
+) -> tuple[TestbenchConfig, FitnessWeights, BiasRules]:
     if config_path is None:
-        return TestbenchConfig(), FitnessWeights()
+        return TestbenchConfig(), FitnessWeights(), BiasRules()
     config = load_config(config_path)
-    return config.testbench, config.weights
+    return config.testbench, config.weights, config.bias
 
 
 def _cmd_run(args: argparse.Namespace) -> int:
@@ -45,8 +47,8 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
 def _cmd_eval(args: argparse.Namespace) -> int:
     circuit = from_subckt(args.circuit.read_text())
-    tb, weights = _testbench_config(args.config)
-    evaluation = evaluate(circuit, Ngspice.get(), tb)
+    tb, weights, rules = _testbench_config(args.config)
+    evaluation = evaluate(circuit, Ngspice.get(), tb, rules)
     print(circuit.describe())
     print()
     if not evaluation.ok:
@@ -83,7 +85,7 @@ def _cmd_plot(args: argparse.Namespace) -> int:
 
 def _cmd_testbench(args: argparse.Namespace) -> int:
     circuit = from_subckt(args.circuit.read_text())
-    tb, _ = _testbench_config(args.config)
+    tb, _, _ = _testbench_config(args.config)
     sys.stdout.write(build_testbench(circuit, tb).netlist)
     return 0
 

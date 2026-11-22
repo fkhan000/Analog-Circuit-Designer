@@ -19,20 +19,30 @@ from acd.sim.backend import SimResult
 FloatArray = NDArray[np.float64]
 ComplexArray = NDArray[np.complex128]
 
-# Region thresholds (volts).
-BJT_ON_VBE = 0.45  # base-emitter junction considered on
-BJT_MIN_VCE = 0.2  # below this the BJT is saturated
-MOS_SAT_MARGIN = 0.05  # required margin above vdsat
+
+@dataclass(frozen=True)
+class BiasRules:
+    """Thresholds for classifying transistor operating regions."""
+
+    bjt_on_vbe: float = 0.45  # base-emitter junction considered on (V)
+    bjt_min_vce: float = 0.2  # below this the BJT is saturated (V)
+    mos_sat_margin: float = 0.05  # required margin of vds above vdsat (V)
+    # A transistor in its amplifying region but carrying less than this is STARVED. Without it,
+    # level-1 MOSFETs (which have no subthreshold current) can sit just above threshold at
+    # picoamps and act as huge resistors, a bias trick that wouldn't survive real leakage.
+    min_current_a: float = 100e-9
 
 
 class Region(StrEnum):
     """Operating region, named so BJTs and MOSFETs share one vocabulary.
 
     ACTIVE is the amplifying region: forward-active for a BJT, saturation for a MOSFET.
+    STARVED is that region at a current below ``BiasRules.min_current_a``.
     LINEAR is BJT saturation or MOSFET triode.
     """
 
     ACTIVE = "active"
+    STARVED = "starved"
     LINEAR = "linear"
     CUTOFF = "cutoff"
     REVERSE = "reverse"
@@ -127,7 +137,7 @@ def _voltage(result: SimResult, vector: str) -> float:
     return 0.0 if vector == "0" else result.op(vector)
 
 
-def _device_state(result: SimResult, probe: DeviceProbe) -> DeviceState:
+def _device_state(result: SimResult, probe: DeviceProbe, rules: BiasRules) -> DeviceState:
     comp = probe.component
     v = {pin: _voltage(result, vec) for pin, vec in probe.terminals.items()}
     current = abs(result.op(probe.vectors["i"]))
@@ -138,32 +148,38 @@ def _device_state(result: SimResult, probe: DeviceProbe) -> DeviceState:
         vbe = sign * (v["b"] - v["e"])
         vbc = sign * (v["b"] - v["c"])
         vce = vbe - vbc
-        if vbe >= BJT_ON_VBE:
-            region = Region.ACTIVE if vce >= BJT_MIN_VCE else Region.LINEAR
+        if vbe >= rules.bjt_on_vbe:
+            region = Region.ACTIVE if vce >= rules.bjt_min_vce else Region.LINEAR
         else:
-            region = Region.REVERSE if vbc >= BJT_ON_VBE else Region.CUTOFF
-        return DeviceState(comp.id, comp.kind, region, current, gm, {"vbe": vbe, "vce": vce})
-
-    vgs = sign * (v["g"] - v["s"])
-    vds = sign * (v["d"] - v["s"])
-    vth = abs(result.op(probe.vectors["von"]))
-    vov = vgs - vth
-    if vov <= 0:
-        region = Region.CUTOFF
-    elif vds >= vov + MOS_SAT_MARGIN:
-        region = Region.ACTIVE
+            region = Region.REVERSE if vbc >= rules.bjt_on_vbe else Region.CUTOFF
+        voltages = {"vbe": vbe, "vce": vce}
     else:
-        region = Region.LINEAR  # includes drain and source swapped (vds < 0)
-    voltages = {"vgs": vgs, "vds": vds, "vov": vov}
+        vgs = sign * (v["g"] - v["s"])
+        vds = sign * (v["d"] - v["s"])
+        vth = abs(result.op(probe.vectors["von"]))
+        vov = vgs - vth
+        if vov <= 0:
+            region = Region.CUTOFF
+        elif vds >= vov + rules.mos_sat_margin:
+            region = Region.ACTIVE
+        else:
+            region = Region.LINEAR  # includes drain and source swapped (vds < 0)
+        voltages = {"vgs": vgs, "vds": vds, "vov": vov}
+
+    if region == Region.ACTIVE and current < rules.min_current_a:
+        region = Region.STARVED
     return DeviceState(comp.id, comp.kind, region, current, gm, voltages)
 
 
-def operating_point(result: SimResult, tb: Testbench) -> OperatingPoint:
+def operating_point(
+    result: SimResult, tb: Testbench, rules: BiasRules | None = None
+) -> OperatingPoint:
+    rules = rules or BiasRules()
     power = -sum(result.op(branch) * volts for branch, volts in tb.supply_currents)
     return OperatingPoint(
         power_w=float(power),
         vout_dc=result.op(tb.output),
-        devices=tuple(_device_state(result, d) for d in tb.devices),
+        devices=tuple(_device_state(result, d, rules) for d in tb.devices),
     )
 
 

@@ -39,7 +39,7 @@ from acd.circuit.graph import Circuit
 from acd.circuit.netlist import from_subckt, to_subckt
 from acd.evaluation.cache import EvaluationCache
 from acd.evaluation.fitness import SIM_FAILED_FITNESS, FitnessWeights, Objectives, score
-from acd.evaluation.metrics import summarize
+from acd.evaluation.metrics import BiasRules, summarize
 from acd.evaluation.stages import Evaluation, Stage, evaluate
 from acd.evaluation.targets import Target, load_target, target_from_dict, target_to_dict
 from acd.evaluation.testbench import TestbenchConfig, build_testbench
@@ -63,6 +63,7 @@ class ExperimentConfig:
     crossover: CrossoverConfig = field(default_factory=CrossoverConfig)
     ga: GAConfig = field(default_factory=GAConfig)
     weights: FitnessWeights = field(default_factory=FitnessWeights)
+    bias: BiasRules = field(default_factory=BiasRules)
     workers: int = 0  # 0 = one per CPU core minus one; 1 = evaluate in this process
     seed_circuits: tuple[Circuit, ...] = ()
     cache_size: int = 200_000
@@ -71,7 +72,7 @@ class ExperimentConfig:
 
 _TOP_LEVEL_KEYS = {
     "name", "target", "workers", "seed_circuits", "cache_size",
-    "ga", "mutation", "crossover", "testbench", "weights",
+    "ga", "mutation", "crossover", "testbench", "weights", "bias",
 }  # fmt: skip
 
 
@@ -122,6 +123,7 @@ def config_from_dict(data: Mapping[str, Any], base_dir: Path) -> ExperimentConfi
         crossover=_build(CrossoverConfig, data.get("crossover", {}), "crossover"),
         ga=_build(GAConfig, data.get("ga", {}), "ga"),
         weights=_build(FitnessWeights, data.get("weights", {}), "weights"),
+        bias=_build(BiasRules, data.get("bias", {}), "bias"),
         workers=int(data.get("workers", 0)),
         seed_circuits=seeds,
         cache_size=int(data.get("cache_size", 200_000)),
@@ -145,6 +147,7 @@ class EvalSetup:
     testbench: TestbenchConfig
     target: Target
     weights: FitnessWeights
+    bias: BiasRules = field(default_factory=BiasRules)
 
 
 @dataclass(frozen=True)
@@ -166,7 +169,7 @@ def _init_worker(setup: EvalSetup) -> None:
 def _score(circuit: Circuit) -> Scored:
     assert _SETUP is not None, "worker not initialized"
     sim = Ngspice.get()
-    evaluation = evaluate(circuit, sim, _SETUP.testbench)
+    evaluation = evaluate(circuit, sim, _SETUP.testbench, _SETUP.bias)
     fitness, objs = score(circuit, evaluation, _SETUP.target, _SETUP.weights)
     if not sim.usable:
         if in_worker_process():
@@ -311,7 +314,7 @@ def run_experiment(
     (run_dir / "meta.json").write_text(json.dumps(meta, indent=2) + "\n")
     (run_dir / "target.json").write_text(json.dumps(target_to_dict(config.target)) + "\n")
 
-    setup = EvalSetup(config.testbench, config.target, config.weights)
+    setup = EvalSetup(config.testbench, config.target, config.weights, config.bias)
     evaluator = Evaluator(setup, workers, config.cache_size)
     problem = CircuitProblem(config, evaluator)
     if log:
@@ -366,7 +369,7 @@ def _write_results(
     run_dir: Path, result: GAResult[Circuit], config: ExperimentConfig, evaluator: Evaluator
 ) -> Evaluation:
     best = result.best
-    evaluation = evaluate(best.genome, Ngspice.get(), config.testbench)
+    evaluation = evaluate(best.genome, Ngspice.get(), config.testbench, config.bias)
     fitness, objs = score(best.genome, evaluation, config.target, config.weights)
 
     header = [f"acd best circuit for '{config.name}'", f"fitness {fitness:.6g}"]

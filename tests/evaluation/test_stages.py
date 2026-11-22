@@ -6,7 +6,7 @@ import pytest
 from acd.circuit.devices import Kind
 from acd.circuit.graph import Circuit
 from acd.circuit.ports import GND, VIN, VOUT
-from acd.evaluation.metrics import Region, summarize
+from acd.evaluation.metrics import BiasRules, Region, summarize
 from acd.evaluation.stages import Stage, evaluate
 from acd.evaluation.testbench import TestbenchConfig, build_testbench
 from acd.sim import Ngspice, SimResult, SimStatus
@@ -71,6 +71,22 @@ def test_diode_small_signal_resistance(ngspice: Ngspice) -> None:
     shunt = 1 / (1 / rd + 1 / 10e3)
     expected_db = 20 * math.log10(shunt / (10e3 + shunt))
     assert summarize(e.response).lf_gain_db == pytest.approx(expected_db, abs=0.3)
+
+
+@pytest.mark.ngspice
+def test_picoamp_device_is_starved(ngspice: Ngspice) -> None:
+    e = evaluate(load_fixture("starved_amp"), ngspice, CONFIG)
+    assert e.ok and e.op is not None
+    states = {d.component_id: d for d in e.op.devices}
+    assert states["4"].region == Region.ACTIVE and states["4"].current_a > 1e-7
+    assert states["5"].region == Region.STARVED and states["5"].current_a < 1e-9
+    assert e.op.bias_score == 0.5
+
+
+@pytest.mark.ngspice
+def test_min_current_is_configurable(ngspice: Ngspice) -> None:
+    e = evaluate(load_fixture("starved_amp"), ngspice, CONFIG, BiasRules(min_current_a=0.0))
+    assert e.op is not None and e.op.bias_score == 1.0  # the old behavior
 
 
 @pytest.mark.ngspice

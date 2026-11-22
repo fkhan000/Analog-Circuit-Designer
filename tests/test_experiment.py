@@ -37,6 +37,12 @@ def test_config_defaults_and_conversions(tmp_path: Path) -> None:
     )
     assert (config.testbench.f_start_hz, config.testbench.f_stop_hz) == (5, 1000)
     assert len(config.seed_circuits) == 1
+    assert config.bias.min_current_a == 100e-9
+
+
+def test_bias_section(tmp_path: Path) -> None:
+    config = config_from_dict({"target": MASK, "bias": {"min_current_a": 1e-6}}, tmp_path)
+    assert config.bias.min_current_a == 1e-6
 
 
 def test_unknown_keys_are_errors(tmp_path: Path) -> None:
