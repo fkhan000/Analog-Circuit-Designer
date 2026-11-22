@@ -1,0 +1,11 @@
+# Gain follows a sine wave in *linear* frequency: four periods between 1 kHz and 100 kHz.
+# That's a comb filter (evenly spaced notches), which lumped circuits can only approximate.
+name = "sine, linear axis"
+type = "sine"
+f_lo = 1e3
+f_hi = 100e3
+offset_db = -10
+amplitude_db = 8
+periods = 4
+axis = "linear"
+points = 101

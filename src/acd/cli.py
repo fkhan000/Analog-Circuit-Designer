@@ -1,4 +1,4 @@
-"""Command-line entry point: ``acd run``, ``acd eval``, ``acd testbench``."""
+"""Command-line entry point: ``acd run``, ``acd eval``, ``acd plot``, ``acd testbench``."""
 
 from __future__ import annotations
 
@@ -74,6 +74,13 @@ def _cmd_eval(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_plot(args: argparse.Namespace) -> int:
+    from acd.plot import plot_run
+
+    print(plot_run(args.run_dir, args.output))
+    return 0
+
+
 def _cmd_testbench(args: argparse.Namespace) -> int:
     circuit = from_subckt(args.circuit.read_text())
     tb, _ = _testbench_config(args.config)
@@ -102,6 +109,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     p.add_argument("--target", type=Path, help="target TOML to score against")
     p.add_argument("--config", type=Path, help="experiment config for test-circuit settings")
     p.set_defaults(func=_cmd_eval)
+
+    p = sub.add_parser("plot", help="plot a run's best response against its target (PNG)")
+    p.add_argument("run_dir", type=Path)
+    p.add_argument("-o", "--output", type=Path, help="default: <run_dir>/response.png")
+    p.set_defaults(func=_cmd_plot)
 
     p = sub.add_parser("testbench", help="print the complete test-circuit netlist for a circuit")
     p.add_argument("circuit", type=Path)

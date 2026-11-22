@@ -2,7 +2,8 @@
 
 A run writes ``runs/<timestamp>_<name>/`` containing:
 
-- ``config.toml``: copy of the config file
+- ``config.toml``: copy of the config file; ``target.json``: the target as evaluated (sine
+  targets written out as curves), so ``acd plot`` can draw it
 - ``meta.json``: seed, git commit, versions, start time
 - ``log.jsonl``: one JSON object per generation (fitness, objectives of the best circuit, why
   candidates failed evaluation, why mutations were rejected, cache hit rate)
@@ -40,7 +41,7 @@ from acd.evaluation.cache import EvaluationCache
 from acd.evaluation.fitness import SIM_FAILED_FITNESS, FitnessWeights, Objectives, score
 from acd.evaluation.metrics import summarize
 from acd.evaluation.stages import Evaluation, Stage, evaluate
-from acd.evaluation.targets import Target, load_target, target_from_dict
+from acd.evaluation.targets import Target, load_target, target_from_dict, target_to_dict
 from acd.evaluation.testbench import TestbenchConfig, build_testbench
 from acd.operators.crossover import CrossoverConfig, subgraph_swap
 from acd.operators.mutation import DEFAULT_OP_WEIGHTS, MutationConfig, MutationOp, mutate
@@ -308,6 +309,7 @@ def run_experiment(
         "workers": workers,
     }
     (run_dir / "meta.json").write_text(json.dumps(meta, indent=2) + "\n")
+    (run_dir / "target.json").write_text(json.dumps(target_to_dict(config.target)) + "\n")
 
     setup = EvalSetup(config.testbench, config.target, config.weights)
     evaluator = Evaluator(setup, workers, config.cache_size)

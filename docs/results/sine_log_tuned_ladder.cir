@@ -1,0 +1,13 @@
+* hand-built 10-part ladder, values tuned by differential evolution
+.subckt dut VIN VOUT VDD
+Rc1 VIN VOUT 430
+Rc2 VOUT 0 3600
+Rc3 VOUT a1 62
+Lc4 a1 a2 0.0033
+Cc5 a2 0 8.2e-07
+Rc6 VOUT b1 62
+Lc7 b1 b2 2.7e-05
+Cc8 b2 0 8.2e-09
+Rc9 VOUT c1 1800
+Lc10 c1 0 3.9e-06
+.ends dut

@@ -12,6 +12,11 @@ dependencies = [
 [project.scripts]
 acd = "acd.cli:main"
 
+[project.optional-dependencies]
+plot = [
+    "matplotlib>=3.8",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=8.0",
@@ -19,6 +24,7 @@ dev = [
     "ruff>=0.6",
     "mypy>=1.11",
     "types-networkx>=3.3",
+    "matplotlib>=3.8",
 ]
 
 [build-system]

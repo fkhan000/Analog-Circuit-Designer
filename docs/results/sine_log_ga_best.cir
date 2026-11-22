@@ -1,0 +1,14 @@
+* acd best circuit for 'sine-log'
+* fitness 2.19186
+* response error 1.742 dB, power 0.001221 mW, 9 parts, bias penalty 0
+.subckt dut VIN VOUT VDD
+Dc1 VIN n2 D_GEN m=2
+Rc3 VOUT n2 620000
+Mc4 0 VOUT n7 VDD PMOS_GEN W=9.346e-05 L=4.5e-07
+Cc8 VIN n7 2.2e-09
+Cc29 n20 n39 5.6e-09
+Cc34 n20 n35 3.9e-07
+Rc36 n20 VDD 24
+Lc37 VIN n35 4.7e-05
+Rc40 n2 n39 6800
+.ends dut
