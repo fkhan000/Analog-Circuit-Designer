@@ -1,0 +1,11 @@
+* Five-transistor OTA wired as a unity-gain follower (VOUT fed back to the inverting gate),
+* with a diode-connected NMOS and resistor setting the tail current (~100 uA).
+.subckt dut VIN VOUT VDD
+M1 n1 VIN tail 0 NMOS_GEN W=10u L=1u
+M2 VOUT VOUT tail 0 NMOS_GEN W=10u L=1u
+M3 n1 n1 VDD VDD PMOS_GEN W=20u L=1u
+M4 VOUT n1 VDD VDD PMOS_GEN W=20u L=1u
+M5 tail bias 0 0 NMOS_GEN W=10u L=1u
+M6 bias bias 0 0 NMOS_GEN W=10u L=1u
+R7 VDD bias 24k
+.ends dut

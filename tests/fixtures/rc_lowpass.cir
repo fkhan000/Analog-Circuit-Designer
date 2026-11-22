@@ -1,0 +1,5 @@
+* First-order RC low-pass, corner at 1/(2*pi*1.6k*100n) = 995 Hz
+.subckt dut VIN VOUT VDD
+R1 VIN VOUT 1.6k
+C2 VOUT 0 100n
+.ends dut
