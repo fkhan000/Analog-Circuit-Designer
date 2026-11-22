@@ -42,6 +42,7 @@ from acd.evaluation.metrics import summarize
 from acd.evaluation.stages import Evaluation, Stage, evaluate
 from acd.evaluation.targets import Target, load_target, target_from_dict
 from acd.evaluation.testbench import TestbenchConfig, build_testbench
+from acd.operators.crossover import CrossoverConfig, subgraph_swap
 from acd.operators.mutation import DEFAULT_OP_WEIGHTS, MutationConfig, MutationOp, mutate
 from acd.operators.seed import initial_population
 from acd.search.ga import GAConfig, GAResult, GenerationStats, Individual, run
@@ -58,6 +59,7 @@ class ExperimentConfig:
     target: Target
     testbench: TestbenchConfig = field(default_factory=TestbenchConfig)
     mutation: MutationConfig = field(default_factory=MutationConfig)
+    crossover: CrossoverConfig = field(default_factory=CrossoverConfig)
     ga: GAConfig = field(default_factory=GAConfig)
     weights: FitnessWeights = field(default_factory=FitnessWeights)
     workers: int = 0  # 0 = one per CPU core minus one; 1 = evaluate in this process
@@ -68,7 +70,7 @@ class ExperimentConfig:
 
 _TOP_LEVEL_KEYS = {
     "name", "target", "workers", "seed_circuits", "cache_size",
-    "ga", "mutation", "testbench", "weights",
+    "ga", "mutation", "crossover", "testbench", "weights",
 }  # fmt: skip
 
 
@@ -116,6 +118,7 @@ def config_from_dict(data: Mapping[str, Any], base_dir: Path) -> ExperimentConfi
         target=target,
         testbench=_build(TestbenchConfig, tb, "testbench"),
         mutation=_build(MutationConfig, mut, "mutation"),
+        crossover=_build(CrossoverConfig, data.get("crossover", {}), "crossover"),
         ga=_build(GAConfig, data.get("ga", {}), "ga"),
         weights=_build(FitnessWeights, data.get("weights", {}), "weights"),
         workers=int(data.get("workers", 0)),
@@ -217,6 +220,7 @@ class CircuitProblem:
         self.ctx = config.testbench.port_context()
         self.rejections: Counter[str] = Counter()
         self.ops: Counter[str] = Counter()
+        self.crossover_rejections: Counter[str] = Counter()
 
     def initial_population(self, size: int, rng: np.random.Generator) -> list[Circuit]:
         return initial_population(
@@ -227,6 +231,13 @@ class CircuitProblem:
         result = mutate(genome, rng, self.config.mutation, self.ctx)
         self.rejections.update(result.rejections)
         self.ops.update(str(op) for op in result.ops)
+        return result.circuit
+
+    def crossover(self, a: Circuit, b: Circuit, rng: np.random.Generator) -> Circuit | None:
+        result = subgraph_swap(
+            a, b, rng, self.config.crossover, self.config.mutation.max_components, self.ctx
+        )
+        self.crossover_rejections.update(result.rejections)
         return result.circuit
 
     def evaluate(self, genomes: list[Circuit]) -> list[tuple[float, Any]]:
@@ -315,18 +326,21 @@ def run_experiment(
                 "evaluation_outcomes": dict(evaluator.last_outcomes),
                 "mutation_rejections": dict(problem.rejections),
                 "mutation_ops": dict(problem.ops),
+                "crossover_rejections": dict(problem.crossover_rejections),
                 "cache_hit_rate": evaluator.cache.hit_rate,
                 "simulated_total": evaluator.simulated,
             }
             problem.rejections.clear()
             problem.ops.clear()
+            problem.crossover_rejections.clear()
             log_file.write(json.dumps(record) + "\n")
             log_file.flush()
             if log:
                 log(
                     f"gen {stats.generation:4d}  best {stats.best_fitness:10.4g}  "
                     f"median {stats.median_fitness:10.4g}  parts {len(best.genome):2d}  "
-                    f"new {stats.evaluated:4d}  cache {evaluator.cache.hit_rate:4.0%}  "
+                    f"new {stats.evaluated:4d}  x-over {stats.crossovers:4d}  "
+                    f"cache {evaluator.cache.hit_rate:4.0%}  "
                     f"{stats.elapsed_s:6.2f}s"
                 )
 

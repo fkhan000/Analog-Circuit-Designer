@@ -1,9 +1,11 @@
 """A generational genetic algorithm that knows nothing about circuits.
 
-The problem supplies four functions (initial population, mutate, evaluate, key), so the circuit
-code never leaks in here and this loop could later be swapped for a multi-objective one.
+The problem supplies the operations (initial population, mutate, crossover, evaluate, key), so the
+circuit code never leaks in here and this loop could later be swapped for a multi-objective one.
 Lower fitness is better. Each generation keeps ``elite_count`` best individuals and fills the rest
-with mutated children of tournament-selected parents, skipping children already in the population.
+with children of tournament-selected parents, skipping children already in the population. A child
+comes from crossover of two parents with probability ``crossover_rate`` (then is mutated with
+probability ``mutate_after_crossover``); otherwise, or if crossover fails, from mutation.
 """
 
 from __future__ import annotations
@@ -29,8 +31,13 @@ class GAConfig:
     stall_generations: int | None = None  # stop after this many generations without improvement
     target_fitness: float | None = None  # stop once the best fitness reaches this
     max_child_attempts: int = 10  # tries to produce a child not already in the population
+    crossover_rate: float = 0.0  # probability that a child comes from crossover
+    mutate_after_crossover: float = 0.5  # probability a crossover child is also mutated
 
     def __post_init__(self) -> None:
+        for name in ("crossover_rate", "mutate_after_crossover"):
+            if not 0.0 <= getattr(self, name) <= 1.0:
+                raise ValueError(f"{name} must be between 0 and 1")
         if self.population_size < 2:
             raise ValueError("population_size must be at least 2")
         if not 0 <= self.elite_count < self.population_size:
@@ -55,6 +62,8 @@ class GenerationStats:
     duplicates: int  # children skipped because they were already in the population
     failed_mutations: int
     elapsed_s: float
+    crossovers: int = 0  # children produced by crossover
+    failed_crossovers: int = 0  # crossovers that found no valid child (fell back to mutation)
 
 
 @dataclass
@@ -69,6 +78,8 @@ class Problem[G](Protocol):
     def initial_population(self, size: int, rng: np.random.Generator) -> list[G]: ...
 
     def mutate(self, genome: G, rng: np.random.Generator) -> G | None: ...
+
+    def crossover(self, a: G, b: G, rng: np.random.Generator) -> G | None: ...
 
     def evaluate(self, genomes: list[G]) -> list[tuple[float, Any]]: ...
 
@@ -101,7 +112,10 @@ def run[G](
     best = population[0]
     history: list[GenerationStats] = []
 
-    def record(gen: int, evaluated: int, dups: int, failed: int, t0: float) -> None:
+    def record(
+        gen: int, evaluated: int, dups: int, failed: int, t0: float, crossed: int = 0,
+        failed_x: int = 0,
+    ) -> None:  # fmt: skip
         stats = GenerationStats(
             generation=gen,
             best_fitness=best.fitness,
@@ -110,6 +124,8 @@ def run[G](
             duplicates=dups,
             failed_mutations=failed,
             elapsed_s=time.perf_counter() - t0,
+            crossovers=crossed,
+            failed_crossovers=failed_x,
         )
         history.append(stats)
         if on_generation:
@@ -131,12 +147,23 @@ def run[G](
         taken = {ind.key for ind in population}
         children: list[G] = []
         child_keys: list[str] = []
-        dups = failed = 0
+        dups = failed = crossed = failed_x = 0
         while len(children) < config.population_size - len(elites):
             parent = tournament(population, config.tournament_size, rng)
             child, key = parent.genome, parent.key
             for _ in range(config.max_child_attempts):
-                candidate = problem.mutate(parent.genome, rng)
+                candidate: G | None = None
+                if config.crossover_rate and rng.random() < config.crossover_rate:
+                    mate = tournament(population, config.tournament_size, rng)
+                    candidate = problem.crossover(parent.genome, mate.genome, rng)
+                    if candidate is None:
+                        failed_x += 1
+                    else:
+                        crossed += 1
+                        if rng.random() < config.mutate_after_crossover:
+                            candidate = problem.mutate(candidate, rng) or candidate
+                if candidate is None:
+                    candidate = problem.mutate(parent.genome, rng)
                 if candidate is None:
                     failed += 1
                     continue
@@ -155,6 +182,6 @@ def run[G](
             stall = 0
         else:
             stall += 1
-        record(gen, len(offspring), dups, failed, t0)
+        record(gen, len(offspring), dups, failed, t0, crossed, failed_x)
 
     return GAResult(best, population, history, stopped)

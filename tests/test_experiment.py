@@ -56,7 +56,8 @@ def test_small_run_writes_outputs(tmp_path: Path, workers: int) -> None:
             "name": "tiny run",
             "target": MASK,
             "workers": workers,
-            "ga": {"population_size": 12, "generations": 3, "seed": 2},
+            "ga": {"population_size": 12, "generations": 3, "seed": 2, "crossover_rate": 0.5},
+            "crossover": {"max_region_size": 3},
             "mutation": {"kinds": ["R", "C"]},
         },
         tmp_path,
@@ -70,6 +71,7 @@ def test_small_run_writes_outputs(tmp_path: Path, workers: int) -> None:
     assert len(lines) == 4
     first, last = json.loads(lines[0]), json.loads(lines[-1])
     assert last["best_fitness"] <= first["best_fitness"]
+    assert "crossover_rejections" in last and "crossovers" in last
     summary = json.loads((d / "summary.json").read_text())
     assert summary["fitness"] == pytest.approx(outcome.result.best.fitness)
     assert len(list((d / "top").glob("rank*.cir"))) == 5
