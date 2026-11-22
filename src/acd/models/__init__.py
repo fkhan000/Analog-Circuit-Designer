@@ -4,5 +4,5 @@ from importlib.resources import files
 
 
 def generic_models() -> str:
-    """Generic models used during search: NPN_GEN, PNP_GEN, NMOS_GEN, PMOS_GEN."""
+    """Generic models used during search: D_GEN, NPN_GEN, PNP_GEN, NMOS_GEN, PMOS_GEN."""
     return (files("acd.models") / "generic.lib").read_text()

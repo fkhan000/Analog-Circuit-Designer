@@ -59,12 +59,17 @@ def test_long_random_walk_keeps_rules(seed: int) -> None:
         assert full_hash(from_subckt(to_subckt(c))) == full_hash(c)
 
 
-def test_inductors_not_used_by_default() -> None:
+def test_default_kinds_include_diodes_and_inductors() -> None:
+    assert set(CONFIG.kinds) == set(Kind)
+
+
+def test_restricted_kinds_are_respected() -> None:
+    config = MutationConfig(kinds=(Kind.R, Kind.C))
     rng = np.random.default_rng(1)
     c = seed_circuit()
     for _ in range(300):
-        c = mutate(c, rng, CONFIG).circuit or c
-    assert Kind.L not in {x.kind for x in c.components}
+        c = mutate(c, rng, config).circuit or c
+        assert {x.kind for x in c.components} <= {Kind.R, Kind.C}
 
 
 def test_inductors_when_enabled() -> None:

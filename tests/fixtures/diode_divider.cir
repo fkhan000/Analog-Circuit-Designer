@@ -1,0 +1,7 @@
+* Forward-biased diode as a small-signal resistor: VIN and VDD both push current into D3 through
+* 10k resistors, so VOUT sits at one diode drop and the input is divided by rd / (R1 + rd || R2).
+.subckt dut VIN VOUT VDD
+R1 VIN VOUT 10k
+R2 VDD VOUT 10k
+D3 VOUT 0 D_GEN
+.ends dut

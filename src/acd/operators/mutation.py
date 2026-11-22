@@ -41,8 +41,9 @@ DEFAULT_OP_WEIGHTS: dict[MutationOp, float] = {
     MutationOp.MOVE_PIN: 1.0,
 }
 
-# Inductors are left out by default: unrealistic in IC design at most frequencies.
-DEFAULT_KINDS = (Kind.R, Kind.C, Kind.NPN, Kind.PNP, Kind.NMOS, Kind.PMOS)
+# Every component type. Restrict per experiment with [mutation] kinds (e.g. no inductors for
+# on-chip designs, where they're unrealistic at most frequencies).
+DEFAULT_KINDS = tuple(Kind)
 
 
 @dataclass(frozen=True)

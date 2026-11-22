@@ -1,5 +1,6 @@
 import math
 
+import numpy as np
 import pytest
 
 from acd.circuit.devices import Kind
@@ -45,6 +46,31 @@ def test_ota_follower_biases_every_device(ngspice: Ngspice) -> None:
     assert all(d.region == Region.ACTIVE for d in e.op.devices)
     assert e.op.vout_dc == pytest.approx(CONFIG.vin_bias, abs=0.05)  # follows the input
     assert summarize(e.response).lf_gain_db == pytest.approx(0, abs=0.3)
+
+
+@pytest.mark.ngspice
+def test_lc_bandpass_resonance(ngspice: Ngspice) -> None:
+    config = TestbenchConfig(points_per_decade=200, f_start_hz=100, f_stop_hz=1e6)
+    e = evaluate(load_fixture("lc_bandpass"), ngspice, config)
+    assert e.ok and e.response is not None
+    s = summarize(e.response)
+    assert s.f_peak_hz == pytest.approx(1 / (2 * math.pi * math.sqrt(10e-3 * 100e-9)), rel=0.02)
+    assert s.peak_gain_db == pytest.approx(0, abs=0.1)  # tank impedance is infinite at f0
+    assert e.response.gain_db_at(np.array([100.0]))[0] < -25  # inductor shorts low frequencies
+
+
+@pytest.mark.ngspice
+def test_diode_small_signal_resistance(ngspice: Ngspice) -> None:
+    e = evaluate(load_fixture("diode_divider"), ngspice, CONFIG)
+    assert e.ok and e.op is not None and e.response is not None
+    vout = e.op.vout_dc
+    assert 0.55 < vout < 0.75  # one diode drop
+    # Diode current from KCL at VOUT, then rd = Vt / Id (+ the model's 1 ohm RS).
+    i_d = (CONFIG.vin_bias - vout) / 10e3 + (CONFIG.vdd - vout) / 10e3 - vout / 1e6
+    rd = 0.025852 / i_d + 1.0
+    shunt = 1 / (1 / rd + 1 / 10e3)
+    expected_db = 20 * math.log10(shunt / (10e3 + shunt))
+    assert summarize(e.response).lf_gain_db == pytest.approx(expected_db, abs=0.3)
 
 
 @pytest.mark.ngspice

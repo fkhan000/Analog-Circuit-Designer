@@ -52,6 +52,25 @@ def test_subckt_output() -> None:
     )
 
 
+def test_diode_and_inductor_lines() -> None:
+    c = Circuit(
+        (
+            Component("c1", Kind.D, (VOUT, GND), (2.0,)),
+            Component("c2", Kind.L, (VIN, VOUT), (4.7e-3,)),
+        )
+    )
+    text = to_subckt(c)
+    assert "Dc1 VOUT 0 D_GEN m=2\n" in text  # anode first
+    assert "Lc2 VIN VOUT 0.0047\n" in text
+    assert full_hash(from_subckt(text)) == full_hash(c)
+
+
+def test_diode_direction_matters_for_hash() -> None:
+    a = Circuit((Component("c1", Kind.D, (VOUT, GND), (1.0,)),))
+    b = Circuit((Component("c1", Kind.D, (GND, VOUT), (1.0,)),))
+    assert full_hash(a) != full_hash(b)
+
+
 @pytest.mark.parametrize("name", FIXTURE_NAMES)
 def test_fixture_round_trip(name: str) -> None:
     c = load_fixture(name)

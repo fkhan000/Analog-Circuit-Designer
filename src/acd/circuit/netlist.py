@@ -50,7 +50,7 @@ def _element_line(c: Component, circuit: Circuit) -> str:
     name = element_name(c)
     if c.kind in (Kind.R, Kind.C, Kind.L):
         return f"{name} {nodes[0]} {nodes[1]} {format_number(c.params[0])}"
-    if c.kind in (Kind.NPN, Kind.PNP):
+    if c.kind in (Kind.D, Kind.NPN, Kind.PNP):
         return f"{name} {' '.join(nodes)} {s.model} m={format_number(c.param('m'))}"
     if c.kind in (Kind.NMOS, Kind.PMOS):
         assert s.bulk_net is not None
@@ -158,6 +158,11 @@ def _parse_element(
             raise CircuitError(f"expected '{prefix}name n1 n2 value': {' '.join(tokens)}")
         kind = Kind(prefix)
         return Component(cid, kind, (net(tokens[1]), net(tokens[2])), (parse_number(tokens[3]),))
+    if prefix == "D":
+        if len(tokens) < 4 or tokens[3].upper() not in MODEL_TO_KIND:
+            raise CircuitError(f"expected 'Dname a k MODEL [m=..]': {' '.join(tokens)}")
+        kv = _key_values(tokens[4:])
+        return Component(cid, Kind.D, (net(tokens[1]), net(tokens[2])), (kv.get("m", 1.0),))
     if prefix == "Q":
         if len(tokens) < 5 or tokens[4].upper() not in MODEL_TO_KIND:
             raise CircuitError(f"expected 'Qname c b e MODEL [m=..]': {' '.join(tokens)}")
