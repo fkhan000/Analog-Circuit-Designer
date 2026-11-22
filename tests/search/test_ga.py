@@ -1,10 +1,8 @@
-from typing import Any
-
 import numpy as np
 import pytest
 
 from acd.search import GAConfig, run, tournament
-from acd.search.ga import Individual
+from acd.search.ga import Individual, Outcome
 
 
 class Parabola:
@@ -22,9 +20,9 @@ class Parabola:
     def crossover(self, a: float, b: float, rng: np.random.Generator) -> float | None:
         return round((a + b) / 2, 3)
 
-    def evaluate(self, genomes: list[float]) -> list[tuple[float, Any]]:
+    def evaluate(self, genomes: list[float]) -> list[Outcome[float]]:
         self.evaluations += len(genomes)
-        return [((g - 3) ** 2, None) for g in genomes]
+        return [Outcome((g - 3) ** 2) for g in genomes]
 
     def key(self, genome: float) -> str:
         return f"{genome:.3f}"
@@ -58,8 +56,8 @@ def test_stops_at_target_fitness() -> None:
 
 def test_stops_when_stalled() -> None:
     class Flat(Parabola):
-        def evaluate(self, genomes: list[float]) -> list[tuple[float, Any]]:
-            return [(1.0, None) for _ in genomes]
+        def evaluate(self, genomes: list[float]) -> list[Outcome[float]]:
+            return [Outcome(1.0) for _ in genomes]
 
     result = run(Flat(), GAConfig(population_size=10, generations=100, stall_generations=5))
     assert result.stopped_because == "stalled"
@@ -116,3 +114,20 @@ def test_crossover_rate_zero_keeps_old_behavior() -> None:
 def test_bad_crossover_rate() -> None:
     with pytest.raises(ValueError):
         GAConfig(crossover_rate=1.5)
+
+
+def test_replacement_genomes_are_kept() -> None:
+    class Rounding(Parabola):
+        """Evaluation 'tunes' each genome to the nearest integer and hands it back."""
+
+        def evaluate(self, genomes: list[float]) -> list[Outcome[float]]:
+            return [Outcome((round(g) - 3) ** 2, genome=float(round(g))) for g in genomes]
+
+    result = run(Rounding(), GAConfig(population_size=10, generations=5, seed=1))
+    assert all(ind.genome == round(ind.genome) for ind in result.population)
+    assert all(ind.key == f"{ind.genome:.3f}" for ind in result.population)
+
+
+def test_time_limit() -> None:
+    result = run(Parabola(), GAConfig(population_size=10, generations=10**6, time_limit_s=0.2))
+    assert result.stopped_because == "time_limit"

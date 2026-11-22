@@ -33,7 +33,7 @@ from typing import Any
 import numpy as np
 
 import acd
-from acd.circuit.canonical import full_hash
+from acd.circuit.canonical import full_hash, topology_hash
 from acd.circuit.devices import Kind
 from acd.circuit.graph import Circuit
 from acd.circuit.netlist import from_subckt, to_subckt
@@ -46,10 +46,11 @@ from acd.evaluation.testbench import TestbenchConfig, build_testbench
 from acd.operators.crossover import CrossoverConfig, subgraph_swap
 from acd.operators.mutation import DEFAULT_OP_WEIGHTS, MutationConfig, MutationOp, mutate
 from acd.operators.seed import initial_population
-from acd.search.ga import GAConfig, GAResult, GenerationStats, Individual, run
+from acd.search.ga import GAConfig, GAResult, GenerationStats, Individual, Outcome, run
 from acd.search.parallel import ParallelMap, in_worker_process
 from acd.sim.backend import SimStatus
 from acd.sim.ngspice import Ngspice, find_library
+from acd.sizing.optimizer import SizingConfig, size
 
 # ---------------------------------------------------------------------------- config
 
@@ -61,6 +62,7 @@ class ExperimentConfig:
     testbench: TestbenchConfig = field(default_factory=TestbenchConfig)
     mutation: MutationConfig = field(default_factory=MutationConfig)
     crossover: CrossoverConfig = field(default_factory=CrossoverConfig)
+    sizing: SizingConfig = field(default_factory=SizingConfig)
     ga: GAConfig = field(default_factory=GAConfig)
     weights: FitnessWeights = field(default_factory=FitnessWeights)
     bias: BiasRules = field(default_factory=BiasRules)
@@ -72,7 +74,7 @@ class ExperimentConfig:
 
 _TOP_LEVEL_KEYS = {
     "name", "target", "workers", "seed_circuits", "cache_size",
-    "ga", "mutation", "crossover", "testbench", "weights", "bias",
+    "ga", "mutation", "crossover", "sizing", "testbench", "weights", "bias",
 }  # fmt: skip
 
 
@@ -121,6 +123,7 @@ def config_from_dict(data: Mapping[str, Any], base_dir: Path) -> ExperimentConfi
         testbench=_build(TestbenchConfig, tb, "testbench"),
         mutation=_build(MutationConfig, mut, "mutation"),
         crossover=_build(CrossoverConfig, data.get("crossover", {}), "crossover"),
+        sizing=_build(SizingConfig, data.get("sizing", {}), "sizing"),
         ga=_build(GAConfig, data.get("ga", {}), "ga"),
         weights=_build(FitnessWeights, data.get("weights", {}), "weights"),
         bias=_build(BiasRules, data.get("bias", {}), "bias"),
@@ -148,6 +151,8 @@ class EvalSetup:
     target: Target
     weights: FitnessWeights
     bias: BiasRules = field(default_factory=BiasRules)
+    sizing: SizingConfig = field(default_factory=SizingConfig)
+    seed: int = 0  # mixed into each sizing run's random seed
 
 
 @dataclass(frozen=True)
@@ -155,6 +160,9 @@ class Scored:
     fitness: float
     objectives: Objectives | None
     evaluation: Evaluation  # without the response arrays, to keep results small
+    circuit: Circuit | None = None  # the circuit with tuned values, if sizing changed it
+    simulations: int = 1
+    start_fitness: float | None = None  # fitness before sizing (None if not sized)
 
 
 _SETUP: EvalSetup | None = None
@@ -166,47 +174,92 @@ def _init_worker(setup: EvalSetup) -> None:
     Ngspice.get()
 
 
-def _score(circuit: Circuit) -> Scored:
+Task = tuple[Circuit, bool]  # (circuit, whether to size it)
+
+
+def _score_once(circuit: Circuit, sim: Ngspice) -> tuple[float, Objectives | None, Evaluation]:
     assert _SETUP is not None, "worker not initialized"
-    sim = Ngspice.get()
     evaluation = evaluate(circuit, sim, _SETUP.testbench, _SETUP.bias)
     fitness, objs = score(circuit, evaluation, _SETUP.target, _SETUP.weights)
+    return fitness, objs, evaluation
+
+
+def _score(task: Task) -> Scored:
+    assert _SETUP is not None, "worker not initialized"
+    circuit, tune = task
+    sim = Ngspice.get()
+    fitness, objs, evaluation = _score_once(circuit, sim)
+    result = Scored(fitness, objs, evaluation.slim())
+    if tune and _SETUP.sizing.enabled and evaluation.failed_stage != Stage.GRAPH:
+        tried: dict[Circuit, tuple[float, Objectives | None, Evaluation]] = {
+            circuit: (fitness, objs, evaluation)
+        }
+
+        def objective(c: Circuit) -> float:
+            if c not in tried:
+                tried[c] = _score_once(c, sim)
+            return tried[c][0]
+
+        # Seeded from the circuit itself, so results don't depend on which worker runs it.
+        rng = np.random.default_rng([int(full_hash(circuit)[:15], 16), _SETUP.seed])
+        sized = size(circuit, objective, rng, _SETUP.sizing, start_fitness=fitness)
+        best_f, best_objs, best_eval = tried[sized.circuit]
+        result = Scored(
+            best_f,
+            best_objs,
+            best_eval.slim(),
+            circuit=sized.circuit if sized.circuit != circuit else None,
+            simulations=len(tried),
+            start_fitness=fitness,
+        )
     if not sim.usable:
         if in_worker_process():
             os._exit(70)  # the pool replaces this worker with one that has a fresh ngspice
         raise RuntimeError("ngspice became unusable; use workers >= 2 to recover automatically")
-    return Scored(fitness, objs, evaluation.slim())
+    return result
 
 
-def _crashed(circuit: Circuit) -> Scored:
+def _crashed(task: Task) -> Scored:
     failed = Evaluation(False, Stage.SIMULATION, "worker_crashed", sim_status=SimStatus.FATAL)
     return Scored(SIM_FAILED_FITNESS, None, failed)
 
 
 class Evaluator:
-    """Scores circuits through the cache, then the worker pool."""
+    """Scores circuits through the cache, then the worker pool (sizing new topologies there)."""
 
     def __init__(self, setup: EvalSetup, workers: int, cache_size: int) -> None:
         self.cache: EvaluationCache[Scored] = EvaluationCache(cache_size)
-        self.pool: ParallelMap[Circuit, Scored] = ParallelMap(
+        self.pool: ParallelMap[Task, Scored] = ParallelMap(
             _score, workers, _init_worker, (setup,), on_crash=_crashed
         )
         self.simulated = 0
         self.last_outcomes: Counter[str] = Counter()  # "ok" or failure reason, last batch
+        self.last_sized = 0  # circuits sized in the last batch
+        self.last_sizing_gain = 0.0  # mean fitness improvement from sizing, last batch
 
-    def evaluate(self, circuits: Sequence[Circuit]) -> list[Scored]:
+    def evaluate(
+        self, circuits: Sequence[Circuit], tune: Sequence[bool] | None = None
+    ) -> list[Scored]:
+        tune = tune if tune is not None else [False] * len(circuits)
         keys = [full_hash(c) for c in circuits]
         results: list[Scored | None] = [
             self.cache.get(c, k) for c, k in zip(circuits, keys, strict=True)
         ]
         missing = [i for i, r in enumerate(results) if r is None]
-        fresh = self.pool.map([circuits[i] for i in missing])
+        fresh = self.pool.map([(circuits[i], tune[i]) for i in missing])
         self.last_outcomes = Counter()
+        gains = []
         for i, scored in zip(missing, fresh, strict=True):
             self.cache.put(circuits[i], scored, keys[i])
+            if scored.circuit is not None:  # the tuned circuit is now known too
+                self.cache.put(scored.circuit, dataclasses.replace(scored, circuit=None))
             results[i] = scored
             self.last_outcomes[scored.evaluation.reason or "ok"] += 1
-        self.simulated += len(missing)
+            self.simulated += scored.simulations
+            if scored.start_fitness is not None and scored.start_fitness < SIM_FAILED_FITNESS:
+                gains.append(scored.start_fitness - scored.fitness)
+        self.last_sized = sum(1 for i in missing if tune[i])
+        self.last_sizing_gain = sum(gains) / len(gains) if gains else 0.0
         done = [r for r in results if r is not None]
         assert len(done) == len(circuits)
         return done
@@ -225,16 +278,33 @@ class CircuitProblem:
         self.rejections: Counter[str] = Counter()
         self.ops: Counter[str] = Counter()
         self.crossover_rejections: Counter[str] = Counter()
+        self._to_size: set[str] = set()  # keys of new children whose values should be tuned
+
+    def _mark(self, child: Circuit, parent: Circuit | None) -> None:
+        sizing = self.config.sizing
+        if not sizing.enabled:
+            return
+        if (
+            sizing.when == "always"
+            or parent is None
+            or topology_hash(child) != topology_hash(parent)
+        ):
+            self._to_size.add(full_hash(child))
 
     def initial_population(self, size: int, rng: np.random.Generator) -> list[Circuit]:
-        return initial_population(
+        population = initial_population(
             size, rng, self.config.mutation, self.ctx, self.config.seed_circuits
         )
+        for c in population:
+            self._mark(c, None)
+        return population
 
     def mutate(self, genome: Circuit, rng: np.random.Generator) -> Circuit | None:
         result = mutate(genome, rng, self.config.mutation, self.ctx)
         self.rejections.update(result.rejections)
         self.ops.update(str(op) for op in result.ops)
+        if result.circuit is not None:
+            self._mark(result.circuit, genome)
         return result.circuit
 
     def crossover(self, a: Circuit, b: Circuit, rng: np.random.Generator) -> Circuit | None:
@@ -242,10 +312,14 @@ class CircuitProblem:
             a, b, rng, self.config.crossover, self.config.mutation.max_components, self.ctx
         )
         self.crossover_rejections.update(result.rejections)
+        if result.circuit is not None:
+            self._mark(result.circuit, None)
         return result.circuit
 
-    def evaluate(self, genomes: list[Circuit]) -> list[tuple[float, Any]]:
-        return [(s.fitness, s) for s in self.evaluator.evaluate(genomes)]
+    def evaluate(self, genomes: list[Circuit]) -> list[Outcome[Circuit]]:
+        tune = [full_hash(g) in self._to_size for g in genomes]
+        self._to_size.clear()
+        return [Outcome(s.fitness, s, s.circuit) for s in self.evaluator.evaluate(genomes, tune)]
 
     def key(self, genome: Circuit) -> str:
         return full_hash(genome)
@@ -314,7 +388,9 @@ def run_experiment(
     (run_dir / "meta.json").write_text(json.dumps(meta, indent=2) + "\n")
     (run_dir / "target.json").write_text(json.dumps(target_to_dict(config.target)) + "\n")
 
-    setup = EvalSetup(config.testbench, config.target, config.weights, config.bias)
+    setup = EvalSetup(
+        config.testbench, config.target, config.weights, config.bias, config.sizing, config.ga.seed
+    )
     evaluator = Evaluator(setup, workers, config.cache_size)
     problem = CircuitProblem(config, evaluator)
     if log:
@@ -334,6 +410,8 @@ def run_experiment(
                 "crossover_rejections": dict(problem.crossover_rejections),
                 "cache_hit_rate": evaluator.cache.hit_rate,
                 "simulated_total": evaluator.simulated,
+                "sized": evaluator.last_sized,
+                "sizing_gain": evaluator.last_sizing_gain,
             }
             problem.rejections.clear()
             problem.ops.clear()
@@ -344,8 +422,8 @@ def run_experiment(
                 log(
                     f"gen {stats.generation:4d}  best {stats.best_fitness:10.4g}  "
                     f"median {stats.median_fitness:10.4g}  parts {len(best.genome):2d}  "
-                    f"new {stats.evaluated:4d}  x-over {stats.crossovers:4d}  "
-                    f"cache {evaluator.cache.hit_rate:4.0%}  "
+                    f"new {stats.evaluated:4d}  sized {evaluator.last_sized:4d}  "
+                    f"sims {evaluator.simulated:8d}  "
                     f"{stats.elapsed_s:6.2f}s"
                 )
 
