@@ -164,8 +164,12 @@ def _make_child[G](
 
 
 def run[G](
-    problem: Problem[G], config: GAConfig, on_generation: GenerationCallback | None = None
+    problem: Problem[G],
+    config: GAConfig,
+    on_generation: GenerationCallback | None = None,
+    should_stop: Callable[[], bool] | None = None,
 ) -> GAResult[G]:
+    """Run the GA. ``should_stop`` is checked before each generation (e.g. a UI's Stop button)."""
     rng = np.random.default_rng(config.seed)
     start = time.perf_counter()
     genomes = problem.initial_population(config.population_size, rng)
@@ -215,6 +219,9 @@ def run[G](
             break
         if config.time_limit_s is not None and time.perf_counter() - start >= config.time_limit_s:
             stopped = "time_limit"
+            break
+        if should_stop is not None and should_stop():
+            stopped = "stopped"
             break
 
         t0 = time.perf_counter()

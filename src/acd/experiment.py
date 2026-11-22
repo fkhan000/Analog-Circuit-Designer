@@ -385,11 +385,21 @@ def _objectives_dict(info: Any) -> dict[str, Any] | None:
     return None
 
 
+ProgressCallback = Callable[[dict[str, Any], Circuit], None]
+
+
 def run_experiment(
     config: ExperimentConfig,
     out_root: Path = Path("runs"),
     log: Callable[[str], None] | None = print,
+    progress: ProgressCallback | None = None,
+    should_stop: Callable[[], bool] | None = None,
 ) -> RunOutcome:
+    """Run one experiment and write its run directory.
+
+    ``progress`` receives each generation's log record and the current best circuit;
+    ``should_stop`` ends the search early (the best circuit so far is still written out).
+    """
     run_dir = _make_run_dir(out_root, config.name)
     if config.source_path is not None:
         shutil.copy(config.source_path, run_dir / "config.toml")
@@ -438,6 +448,8 @@ def run_experiment(
             problem.crossover_rejections.clear()
             log_file.write(json.dumps(record) + "\n")
             log_file.flush()
+            if progress:
+                progress(record, best.genome)
             if log:
                 log(
                     f"gen {stats.generation:4d}  best {stats.best_fitness:10.4g}  "
@@ -449,7 +461,7 @@ def run_experiment(
                 )
 
         try:
-            result = run(problem, config.ga, on_generation)
+            result = run(problem, config.ga, on_generation, should_stop)
         finally:
             evaluator.close()
 
