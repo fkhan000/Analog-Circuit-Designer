@@ -19,6 +19,9 @@ class Parabola:
     def mutate(self, genome: float, rng: np.random.Generator) -> float | None:
         return round(genome + float(rng.normal(0, 1)), 3)
 
+    def crossover(self, a: float, b: float, rng: np.random.Generator) -> float | None:
+        return round((a + b) / 2, 3)
+
     def evaluate(self, genomes: list[float]) -> list[tuple[float, Any]]:
         self.evaluations += len(genomes)
         return [((g - 3) ** 2, None) for g in genomes]
@@ -81,3 +84,35 @@ def test_bad_config() -> None:
         GAConfig(population_size=1)
     with pytest.raises(ValueError):
         GAConfig(population_size=10, elite_count=10)
+
+
+def test_crossover_children_are_used() -> None:
+    result = run(
+        Parabola(), GAConfig(population_size=30, generations=40, crossover_rate=0.5, seed=3)
+    )
+    assert abs(result.best.genome - 3) < 0.1
+    assert sum(s.crossovers for s in result.history) > 0
+
+
+def test_failed_crossover_falls_back_to_mutation() -> None:
+    class NoCrossover(Parabola):
+        def crossover(self, a: float, b: float, rng: np.random.Generator) -> float | None:
+            return None
+
+    problem = NoCrossover()
+    result = run(problem, GAConfig(population_size=10, generations=3, crossover_rate=1.0))
+    assert all(s.crossovers == 0 for s in result.history)
+    assert sum(s.failed_crossovers for s in result.history) > 0
+    assert problem.evaluations == 10 + 3 * 8  # every child slot still filled
+
+
+def test_crossover_rate_zero_keeps_old_behavior() -> None:
+    # The random stream must not change when crossover is off.
+    a = run(Parabola(), GAConfig(population_size=20, generations=10, seed=5))
+    b = run(Parabola(), GAConfig(population_size=20, generations=10, seed=5, crossover_rate=0.0))
+    assert a.best.genome == b.best.genome
+
+
+def test_bad_crossover_rate() -> None:
+    with pytest.raises(ValueError):
+        GAConfig(crossover_rate=1.5)
