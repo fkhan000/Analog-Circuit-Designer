@@ -285,7 +285,7 @@ class CircuitProblem:
         self.ops: Counter[str] = Counter()
         self.crossover_rejections: Counter[str] = Counter()
         self._to_size: set[str] = set()  # keys of new children whose values should be tuned
-        self._features: OrderedDict[str, Counter[str]] = OrderedDict()  # topology -> features
+        self._features: OrderedDict[Circuit, Counter[str]] = OrderedDict()  # circuit -> features
 
     def _mark(self, child: Circuit, parent: Circuit | None) -> None:
         sizing = self.config.sizing
@@ -332,10 +332,10 @@ class CircuitProblem:
         return full_hash(genome)
 
     def _structure(self, c: Circuit) -> Counter[str]:
-        key = topology_hash(c)
-        features = self._features.get(key)
+        # Keyed by the circuit itself: hashing a frozen circuit is far cheaper than a WL hash.
+        features = self._features.get(c)
         if features is None:
-            features = self._features[key] = structure_features(c)
+            features = self._features[c] = structure_features(c)
             if len(self._features) > 50_000:
                 self._features.popitem(last=False)
         return features

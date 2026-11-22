@@ -105,3 +105,31 @@ def test_speciation_keeps_population_diverse() -> None:
 def test_speciation_off_reports_no_species() -> None:
     result = run(TwoValleys(), GAConfig(population_size=20, generations=3))
     assert all(s.species == 0 and s.species_threshold is None for s in result.history)
+
+
+def wide(a: float, b: float) -> float:
+    return abs(a - b) / 100
+
+
+def test_threshold_is_calibrated_on_first_population() -> None:
+    sp: Speciator[float] = Speciator(wide, threshold=None, target=5)
+    species = sp.assign([ind(float(x), float(x)) for x in range(100)], gen=0)
+    assert sp.threshold is not None and 0 < sp.threshold < 1
+    assert 3 <= len(species) <= 8
+
+
+def test_species_count_is_capped() -> None:
+    sp: Speciator[float] = Speciator(wide, threshold=0.001, target=2, max_species=4)
+    pop = [ind(float(x), float(x)) for x in range(20)]
+    species = sp.assign(pop, gen=0)
+    assert len(species) == 4
+    assert sum(len(s.members) for s in species) == 20  # overflow joined the nearest species
+
+
+def test_threshold_holds_steady_inside_the_band() -> None:
+    sp: Speciator[float] = Speciator(wide, threshold=None, target=8)
+    pop = [ind(float(x), float(x)) for x in range(0, 100, 3)]
+    counts = []
+    for gen in range(15):
+        counts.append(len(sp.assign(pop, gen)))
+    assert len(set(counts[3:])) == 1

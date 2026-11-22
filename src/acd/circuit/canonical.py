@@ -95,8 +95,11 @@ def structure_features(circuit: Circuit, iterations: int = 2) -> Counter[str]:
 
 def feature_distance(a: Counter[str], b: Counter[str]) -> float:
     """Multiset Jaccard distance: 0 for identical structure, 1 for nothing in common."""
-    union = sum((a | b).values())
-    return 1.0 - sum((a & b).values()) / union if union else 0.0
+    if len(a) > len(b):
+        a, b = b, a
+    shared = sum(min(n, b[k]) for k, n in a.items() if k in b)
+    union = a.total() + b.total() - shared
+    return 1.0 - shared / union if union else 0.0
 
 
 def structural_distance(a: Circuit, b: Circuit) -> float:
