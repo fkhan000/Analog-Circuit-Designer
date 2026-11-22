@@ -42,3 +42,23 @@ def circuits(
         nets = tuple(draw(st.sampled_from(pool)) for _ in spec(kind).pins)
         comps.append(Component(f"c{i + 1}", kind, nets, draw(param_values(kind))))
     return Circuit(tuple(comps), next_id=n + 5)
+
+
+# Top-level functions for ParallelMap tests (worker processes import them by name).
+
+
+def square(x: int) -> int:
+    return x * x
+
+
+def square_or_crash(x: int) -> int:
+    """Kills the worker process for negative inputs."""
+    import os
+
+    if x < 0:
+        os._exit(1)
+    return x * x
+
+
+def crashed(x: int) -> int:
+    return -1

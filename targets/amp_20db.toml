@@ -1,0 +1,15 @@
+# Amplifier: 20 dB (x10) +-1 dB from 1 kHz to 100 kHz, rolled off below 10 dB by 10 MHz.
+# Passive circuits can't reach this; the GA has to find an active circuit.
+name = "amplifier 20 dB"
+type = "mask"
+
+[[band]]
+f_lo = 1e3
+f_hi = 100e3
+min_db = 19
+max_db = 21
+
+[[band]]
+f_lo = 10e6
+f_hi = 50e6
+max_db = 10

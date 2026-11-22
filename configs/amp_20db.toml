@@ -1,0 +1,29 @@
+# Active target: needs transistors (BJTs and MOSFETs allowed).
+name = "amp-20db"
+target = "../targets/amp_20db.toml"
+workers = 0
+
+[ga]
+population_size = 200
+generations = 150
+elite_count = 4
+tournament_size = 4
+seed = 1
+stall_generations = 60
+
+[mutation]
+max_components = 10
+kinds = ["R", "C", "NPN", "PNP", "NMOS", "PMOS"]
+value_sigma = 0.7
+mean_extra_ops = 0.5
+
+[testbench]
+vdd = 3.3
+r_load = 1e6
+c_load = 1e-12
+
+[weights]
+response = 1.0
+power_per_mw = 0.1
+per_component = 0.05
+bias = 2.0
