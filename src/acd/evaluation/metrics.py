@@ -185,5 +185,8 @@ def operating_point(
 
 def response(result: SimResult, tb: Testbench) -> Response:
     freq = np.real(result.vector("ac", "frequency")).astype(np.float64)
-    h = np.asarray(result.vector("ac", tb.output) / result.vector("ac", tb.input), np.complex128)
+    with np.errstate(invalid="ignore", divide="ignore"):  # non-finite values are checked later
+        h = np.asarray(
+            result.vector("ac", tb.output) / result.vector("ac", tb.input), np.complex128
+        )
     return Response(freq, h)

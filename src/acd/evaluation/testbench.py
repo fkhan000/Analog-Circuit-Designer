@@ -34,7 +34,7 @@ class TestbenchConfig:
     f_start_hz: float = 10.0
     f_stop_hz: float = 100e6
     points_per_decade: int = 20
-    timeout_s: float = 5.0
+    timeout_s: float = 1.0  # .op + .ac normally takes ~1 ms; longer means ngspice is stuck
 
     @property
     def vin_bias(self) -> float:

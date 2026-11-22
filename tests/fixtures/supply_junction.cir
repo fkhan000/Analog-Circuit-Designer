@@ -1,0 +1,14 @@
+* Regression: hung ngspice's operating point (> 30 s) when BJT models had no series resistance:
+* Qc11's base-collector junction sits directly across VDD-GND.
+.subckt dut VIN VOUT VDD
+Qc2 VOUT n3 VOUT PNP_GEN m=1
+Mc4 n7 VIN n7 VDD PMOS_GEN W=1.005e-05 L=4.9e-07
+Qc5 VIN n3 VDD PNP_GEN m=6
+Mc8 VOUT n3 n9 0 NMOS_GEN W=1.309e-05 L=3.1e-07
+Mc10 n7 VOUT n9 VDD PMOS_GEN W=1.71e-06 L=5.8e-07
+Qc11 0 VDD n3 NPN_GEN m=8
+Dc12 VIN n9 D_GEN m=2
+Dc13 VIN n3 D_GEN m=1
+Qc14 VDD VOUT n3 NPN_GEN m=8
+Cc15 n7 n3 1.5e-11
+.ends dut

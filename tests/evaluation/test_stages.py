@@ -1,4 +1,5 @@
 import math
+import time
 
 import numpy as np
 import pytest
@@ -87,6 +88,54 @@ def test_picoamp_device_is_starved(ngspice: Ngspice) -> None:
 def test_min_current_is_configurable(ngspice: Ngspice) -> None:
     e = evaluate(load_fixture("starved_amp"), ngspice, CONFIG, BiasRules(min_current_a=0.0))
     assert e.op is not None and e.op.bias_score == 1.0  # the old behavior
+
+
+@pytest.mark.ngspice
+@pytest.mark.parametrize("name", ["supply_junction", "garbage_op"])
+def test_junctions_across_sources_simulate_sanely(ngspice: Ngspice, name: str) -> None:
+    # Both once broke ngspice: one hung the operating point, one returned -8e41 W "successfully".
+    # BJT series resistances in the generic models bound the junction currents.
+    start = time.perf_counter()
+    e = evaluate(load_fixture(name), ngspice, CONFIG)
+    assert time.perf_counter() - start < 0.5
+    assert e.ok and e.op is not None and e.op.power_w >= 0
+
+
+def fake_result(power_w: float, gain: float) -> SimResult:
+    """Results for the RC low-pass fixture (no transistors) with chosen power and gain."""
+    freq = np.array([10.0, 100.0, 1000.0])
+    supply_current = -power_w / CONFIG.vdd  # current into VDD's + terminal
+    op = {"vout": np.array([1.0]), "vdd#branch": np.array([supply_current]),
+          "vin#branch": np.array([0.0])}  # fmt: skip
+    ac = {"frequency": freq.astype(np.complex128), "vout": np.full(3, gain, np.complex128),
+          "vin": np.ones(3, np.complex128)}  # fmt: skip
+    return SimResult(SimStatus.OK, {"op1": op, "ac1": ac})
+
+
+class Canned:
+    def __init__(self, result: SimResult) -> None:
+        self.result = result
+
+    def run(self, netlist: str, timeout_s: float | None = None) -> SimResult:
+        return self.result
+
+
+@pytest.mark.parametrize(
+    ("power_w", "gain", "reason"),
+    [
+        (-8e41, 1.0, "implausible_power"),  # what ngspice once returned without an error
+        (1e-3, 1e7, "implausible_gain"),
+        (1e-3, float("inf"), "non_finite"),
+    ],
+)
+def test_implausible_results_are_rejected(power_w: float, gain: float, reason: str) -> None:
+    e = evaluate(load_fixture("rc_lowpass"), Canned(fake_result(power_w, gain)), CONFIG)
+    assert not e.ok and e.failed_stage == Stage.METRICS and e.reason == reason
+
+
+def test_plausible_fake_result_passes() -> None:
+    e = evaluate(load_fixture("rc_lowpass"), Canned(fake_result(1e-3, 0.5)), CONFIG)
+    assert e.ok and e.op is not None and e.op.power_w == pytest.approx(1e-3)
 
 
 @pytest.mark.ngspice

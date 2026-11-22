@@ -245,7 +245,7 @@ class Ngspice:
         self._command("bg_run")
         if not self._finished.wait(timeout_s):
             self._command("bg_halt")
-            stopped = self._finished.wait(5.0)
+            stopped = self._finished.wait(1.0)
             _, warnings = self._take_output()
             msg = f"timed out after {timeout_s} s" + ("" if stopped else " and did not stop")
             return SimResult(
