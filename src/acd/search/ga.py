@@ -44,7 +44,7 @@ class GAConfig:
     time_limit_s: float | None = None  # stop starting new generations after this much time
     speciation: bool = False
     species_target: int = 8  # the compatibility threshold adapts to keep about this many species
-    species_threshold: float = 0.5  # starting compatibility threshold (distance in [0, 1])
+    species_threshold: float | None = None  # start threshold; None calibrates on generation 0
     species_stagnation: int = 30  # generations without improvement before a species stops breeding
 
     def __post_init__(self) -> None:

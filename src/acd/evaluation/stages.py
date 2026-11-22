@@ -77,9 +77,29 @@ def evaluate(
             False, Stage.METRICS, f"missing_vector:{e}", sim_status=result.status,
             sim_time_s=elapsed,
         )  # fmt: skip
-    if not (math.isfinite(op.power_w) and np.all(np.isfinite(resp.h))):
+    problem = implausibility(op, resp)
+    if problem:
         return Evaluation(
-            False, Stage.METRICS, "non_finite", sim_status=result.status, op=op,
-            sim_time_s=elapsed,
-        )  # fmt: skip
+            False, Stage.METRICS, problem, sim_status=result.status, op=op, sim_time_s=elapsed
+        )
     return Evaluation(True, sim_status=result.status, op=op, response=resp, sim_time_s=elapsed)
+
+
+# A circuit of passive parts and transistors can't deliver net power back to the sources, so total
+# source power below this is a numerically broken operating point, not physics. ngspice can return
+# one without reporting an error (seen after its gmin and source stepping both struggled).
+MIN_PLAUSIBLE_POWER_W = -1e-6
+MAX_PLAUSIBLE_GAIN = 1e6  # 120 dB; beyond this the response comes from ideal-part artifacts
+
+
+def implausibility(op: OperatingPoint, resp: Response) -> str:
+    """Why these results can't be trusted, or "" if they look physically possible."""
+    if not (math.isfinite(op.power_w) and math.isfinite(op.vout_dc)):
+        return "non_finite"
+    if not np.all(np.isfinite(resp.h)):
+        return "non_finite"
+    if op.power_w < MIN_PLAUSIBLE_POWER_W:
+        return "implausible_power"
+    if float(np.max(np.abs(resp.h))) > MAX_PLAUSIBLE_GAIN:
+        return "implausible_gain"
+    return ""

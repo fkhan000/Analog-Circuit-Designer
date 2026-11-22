@@ -116,8 +116,41 @@ A good topology with poorly chosen component values scores badly and gets droppe
 
   ![GA best vs. tuned ladder on the sine target](docs/results/sine_log_comparison.png)
 - **A sine in linear frequency (a comb filter) is out of reach** for 10 lumped parts: no progress beyond a flat line.
-- **Crossover hasn't helped yet.** Amplifier target, 3 seeds each: every run meets the mask with or without crossover. Sine target, 3 seeds each: mean RMS error 4.9 dB with `crossover_rate = 0.3`, 3.8 dB without, 4.2 dB with settings that favor diversity (population 600, tournament size 2, twice as many value mutations). About half of crossover children are identical to a parent. The example configs leave crossover off until it shows a benefit, probably together with the sizing loop.
-- **The GA exploits model weaknesses.** The amplifier biases itself through a PMOS conducting 4 pA, which works only because level-1 MOSFETs have no subthreshold current. The best sine circuit does the same (a PMOS at 5 pA). Next fix: require a minimum current (or current density) for a transistor to count as active in the bias score.
+- **Crossover didn't help on its own.** Amplifier target, 3 seeds each: every run meets the mask with or without crossover. Sine target, 3 seeds each: mean RMS error 4.9 dB with `crossover_rate = 0.3`, 3.8 dB without, 4.2 dB with settings that favor diversity (population 600, tournament size 2, twice as many value mutations). About half of crossover children are identical to a parent. Combined with sizing and speciation it does help (see below).
+- **The GA exploited model weaknesses (fixed).** The first amplifier biased itself through a PMOS conducting 4 pA, which only works because level-1 MOSFETs have no subthreshold current; the early best sine circuit did the same. A transistor now needs at least 100 nA (`[bias] min_current_a`) to count as active.
+
+## Search improvements: sizing, speciation, crossover
+
+Log-axis sine target, every variant given the same 120 s on 11 workers, 3 seeds each (RMS error in dB, lower is better; a flat line scores 5.62, the hand-tuned 10-part ladder 1.63):
+
+| Variant | Seed 1 | Seed 2 | Seed 3 | Mean |
+|---|---|---|---|---|
+| Baseline (population 300) | 4.84 | 4.12 | 4.87 | 4.61 |
+| Sizing (population 100, 40 simulations per new topology) | 1.99 | 1.80 | 2.02 | **1.93** |
+| Speciation (about 8 species) | **1.42** | 4.29 | 2.31 | 2.67 |
+| Sizing + speciation | 4.30 | 2.51 | 1.98 | 2.93 |
+| Sizing + speciation + crossover 0.3 | 2.16 | 2.21 | 1.64 | 2.00 |
+
+- **Sizing is the big, reliable win.** Every sizing seed beats every baseline seed, and the mean drops from 4.6 to 1.9 dB, better than the hand-tuned ladder on two seeds out of three. It simulates about 4× more circuits in the same time (730k vs. 190k) but spends them tuning promising topologies instead of judging them on random values.
+- **Speciation alone found the best circuit** (1.42 dB, ten passive parts; see below) but is inconsistent: one of its seeds stayed near the baseline.
+- **Sizing + speciation is no better than sizing alone.** With a population of 100 split into about 8 species, each species gets only a few children per generation, each costing ~40 simulations. A larger population or fewer species may change that; not yet tested.
+- **Crossover helps once children get sized.** Adding it to sizing + speciation improved every seed (mean 2.9 → 2.0 dB). This is the first configuration where crossover helped; earlier, swapped-in parts arrived with values tuned for another circuit.
+- Three seeds per variant can't resolve differences much below 0.5 dB, so the ranking among the last four rows is tentative. The baseline-vs-sizing gap is clear.
+- **Every run still misses the first peak at 316 Hz** (the response stays flat at the low end instead of rising and falling).
+- The example config `configs/sine_log.toml` now enables sizing.
+
+![best circuit from the comparison](docs/results/search_comparison_best.png)
+
+Its time response (step and impulse response from an ngspice transient) rings across about four decades of time, the time-domain image of features spread over four decades of frequency: [`docs/results/search_comparison_best_time.png`](docs/results/search_comparison_best_time.png). The target only constrains gain, so a different circuit with the same gain curve could ring differently.
+
+## Evaluation robustness
+
+The comparison surfaced two simulator failures that would have corrupted results:
+
+- **ngspice can report success with a garbage operating point.** One circuit came back with -8e41 W of power and no error; it scored a fitness of -8e43 and took over a run. A stress test of 20k random circuits found absurd power in 18% of successful simulations.
+- **ngspice can hang** in the operating point (over 30 s) when a junction sits directly across a supply.
+
+Both came from BJT models without series resistance, so a junction across an ideal source had no current limit. The generic BJT models now have RB/RC/RE (10/1/0.5 ohm, typical of real small-signal models): the same 20k circuits now simulate with no hangs and no negative power. Results that are physically impossible anyway (negative total source power, gain above 120 dB, non-finite values) are rejected as a failed simulation, and fitness can never be negative.
 
 ## Resolved: what "nonlinear" means for the fitness
 

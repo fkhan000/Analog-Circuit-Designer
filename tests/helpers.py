@@ -20,6 +20,8 @@ FIXTURE_NAMES = (
     "lc_bandpass",
     "diode_divider",
     "starved_amp",
+    "supply_junction",
+    "garbage_op",
 )
 
 

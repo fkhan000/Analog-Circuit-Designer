@@ -30,8 +30,8 @@ uv run mypy
 uv run acd run configs/lowpass_1k.toml          # passive target, ~3 s
 uv run acd run configs/amp_20db.toml            # needs transistors, ~12 s on 12 cores
 uv run acd run configs/amp_20db.toml --generations 300 --seed 7 --workers 4
-uv run acd run configs/sine_log.toml            # non-traditional target: a sine on a Bode plot
-uv run acd plot runs/<run-dir>                  # writes response.png: best response vs. target
+uv run acd run configs/sine_log.toml            # a sine on a Bode plot, with sizing (~2 min)
+uv run acd plot runs/<run-dir>                  # redraws response.png (runs also write it)
 
 uv run acd eval tests/fixtures/ce_amp.cir --target targets/amp_20db.toml
 uv run acd testbench tests/fixtures/ce_amp.cir  # full netlist; runs as-is in ngspice
@@ -48,6 +48,7 @@ Each run writes `runs/<timestamp>_<name>/`:
 | `log.jsonl` | one line per generation: fitness, why candidates failed, why mutations were rejected |
 | `top/rank<N>.cir` | the five best circuits in the final population |
 | `target.json` | the target as evaluated (used by `acd plot`) |
+| `response.png` | the best circuit's frequency response against the target |
 
 Configs are TOML: see `configs/` for every section (`[ga]`, `[mutation]`, `[crossover]`,
 `[testbench]`, `[weights]`) and `targets/` for spec-mask, curve and sine targets. Unknown keys are errors, so typos

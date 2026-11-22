@@ -9,6 +9,7 @@ doesn't, and any circuit that passes the graph checks beats any that doesn't.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 from acd.circuit.graph import Circuit
@@ -52,6 +53,11 @@ def scalar_fitness(
     if objs is None:
         if evaluation.failed_stage == Stage.GRAPH:
             return GRAPH_INVALID_FITNESS + 1e6 * len(evaluation.violations)
+        return SIM_FAILED_FITNESS
+    # Defense in depth: every term should be finite and non-negative. Anything else means broken
+    # results got through, and must never look like a good circuit.
+    terms = (objs.response_error_db, objs.power_w, objs.bias_penalty)
+    if not all(math.isfinite(t) and t >= 0 for t in terms):
         return SIM_FAILED_FITNESS
     return (
         weights.response * objs.response_error_db

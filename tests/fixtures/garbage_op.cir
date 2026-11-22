@@ -1,0 +1,12 @@
+* Regression: ngspice reported success with a garbage operating point (-8e41 W of power) that
+* briefly won a GA run. Junctions directly across ideal sources, no series resistance.
+.subckt dut VIN VOUT VDD
+Rc1 n2 n9 1500000
+Dc3 VIN n2 D_GEN m=1
+Qc5 VIN VOUT 0 NPN_GEN m=2
+Rc6 VDD VIN 6200
+Qc7 n2 n2 VOUT NPN_GEN m=2
+Qc8 VDD 0 VOUT PNP_GEN m=2
+Qc10 n9 VOUT VOUT NPN_GEN m=3
+Lc11 n2 VOUT 8.2e-06
+.ends dut

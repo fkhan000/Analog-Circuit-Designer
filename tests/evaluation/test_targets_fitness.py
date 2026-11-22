@@ -98,6 +98,15 @@ def test_fitness_tiers() -> None:
     assert scalar_fitness(ok, terrible, w) < SIM_FAILED_FITNESS
 
 
+def test_broken_objectives_never_look_good() -> None:
+    ok = Evaluation(True)
+    for bad in (
+        Objectives(response_error_db=1.0, power_w=-8e41, n_components=3, bias_penalty=0),
+        Objectives(response_error_db=float("nan"), power_w=1e-3, n_components=3, bias_penalty=0),
+    ):
+        assert scalar_fitness(ok, bad, FitnessWeights()) == SIM_FAILED_FITNESS
+
+
 def test_fitness_weights() -> None:
     ok = Evaluation(True)
     objs = Objectives(response_error_db=2.0, power_w=1e-3, n_components=4, bias_penalty=0.5)

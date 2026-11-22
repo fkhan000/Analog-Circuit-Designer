@@ -4,16 +4,21 @@ name = "sine-log"
 target = "../targets/sine_log.toml"
 workers = 0
 
+# Settings from the search comparison in DESIGN.md: sizing gave the best and most consistent
+# results (mean 1.9 dB RMS over 3 seeds in 120 s, vs. 4.6 dB without it).
 [ga]
-population_size = 300
-generations = 300
+population_size = 100
+generations = 1000
 elite_count = 4
 tournament_size = 4
 seed = 1
-stall_generations = 80
-# Crossover is available but didn't help on this target (3 seeds each: mean RMS error 4.9 dB with
-# crossover_rate 0.3, 3.8 dB without). See DESIGN.md. Seed 1 without crossover reaches 1.74 dB.
-crossover_rate = 0.0
+stall_generations = 150
+time_limit_s = 120
+crossover_rate = 0.0   # 0.3 helps when combined with speciation = true (see DESIGN.md)
+
+[sizing]
+enabled = true
+budget = 40            # simulations per new topology
 
 [crossover]
 max_region_size = 4

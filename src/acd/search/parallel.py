@@ -2,8 +2,9 @@
 
 Each worker process holds its own simulator (libngspice can't be shared between threads). If a
 worker dies (a crash in native code, or a worker that exits because its simulator became unusable),
-the pool is rebuilt and the unfinished items are retried one at a time; an item that kills a worker
-again gets ``on_crash(item)`` as its result.
+results that already finished are kept, the pool is rebuilt, and the unfinished items are retried in
+parallel one per task. Items still unfinished after that are run one at a time to isolate the
+culprit; an item that kills a worker on its own gets ``on_crash(item)`` as its result.
 """
 
 from __future__ import annotations
@@ -14,6 +15,12 @@ from collections.abc import Callable, Sequence
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
 from typing import Any
+
+PARALLEL_RETRY_ROUNDS = 2  # rounds of parallel retries after a crash before isolating items
+
+
+def _run_chunk[T, R](fn: Callable[[T], R], chunk: list[T]) -> list[R]:
+    return [fn(x) for x in chunk]
 
 
 def in_worker_process() -> bool:
@@ -63,14 +70,29 @@ class ParallelMap[T, R]:
     def map(self, items: Sequence[T]) -> list[R]:
         if self.workers <= 1:
             return [self.fn(x) for x in items]
-        if not items:
-            return []
-        chunksize = max(1, len(items) // (self.workers * 4))
-        try:
-            return list(self._get_pool().map(self.fn, items, chunksize=chunksize))
-        except BrokenProcessPool:
-            self._restart()
-            return [self._one_at_a_time(x) for x in items]
+        results: dict[int, R] = {}
+        pending = list(range(len(items)))
+        chunk = max(1, len(items) // (self.workers * 4))
+        for _ in range(1 + PARALLEL_RETRY_ROUNDS):
+            if not pending:
+                break
+            pool = self._get_pool()
+            batches = [pending[i : i + chunk] for i in range(0, len(pending), chunk)]
+            futures = [
+                (b, pool.submit(_run_chunk, self.fn, [items[i] for i in b])) for b in batches
+            ]
+            failed: list[int] = []
+            for batch, future in futures:
+                try:
+                    results.update(zip(batch, future.result(), strict=True))
+                except BrokenProcessPool:
+                    failed.extend(batch)
+            if failed:
+                self._restart()
+            pending, chunk = failed, 1
+        for i in pending:
+            results[i] = self._one_at_a_time(items[i])
+        return [results[i] for i in range(len(items))]
 
     def _one_at_a_time(self, item: T) -> R:
         try:

@@ -2,7 +2,7 @@
 * Deliberately simple (junction diode, Gummel-Poon BJTs, level-1 MOSFETs) so simulations are fast and converge
 * easily. They don't match any real process: check final circuits with real models.
 .model D_GEN D (IS=1e-14 N=1 RS=1 CJO=1p M=0.5 VJ=0.7 TT=5n BV=50 IBV=1u)
-.model NPN_GEN NPN (IS=1e-15 BF=100 BR=1 VAF=50 IKF=50m CJE=0.5p CJC=0.3p TF=0.2n TR=10n)
-.model PNP_GEN PNP (IS=1e-15 BF=50 BR=1 VAF=30 IKF=20m CJE=0.6p CJC=0.4p TF=0.5n TR=20n)
+.model NPN_GEN NPN (IS=1e-15 BF=100 BR=1 VAF=50 IKF=50m RB=10 RC=1 RE=0.5 CJE=0.5p CJC=0.3p TF=0.2n TR=10n)
+.model PNP_GEN PNP (IS=1e-15 BF=50 BR=1 VAF=30 IKF=20m RB=10 RC=1 RE=0.5 CJE=0.6p CJC=0.4p TF=0.5n TR=20n)
 .model NMOS_GEN NMOS (LEVEL=1 VTO=0.5 KP=200u GAMMA=0.4 PHI=0.7 LAMBDA=0.05 TOX=4n CGSO=0.3n CGDO=0.3n)
 .model PMOS_GEN PMOS (LEVEL=1 VTO=-0.5 KP=80u GAMMA=0.4 PHI=0.7 LAMBDA=0.05 TOX=4n CGSO=0.3n CGDO=0.3n)
